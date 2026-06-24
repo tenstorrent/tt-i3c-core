@@ -1,0 +1,24 @@
+tt-axi-controller:
+  CmdFifoDepth: 64
+  RxFifoDepth: 64
+  TxFifoDepth: 64
+  TtiTxDescFifoDepth: 32
+  TtiRxDescFifoDepth: 32
+  TtiRxFifoDepth: 64
+  TtiTxFifoDepth: 64
+  RespFifoDepth: 32
+  IbiFifoDepth: 32
+  IbiFifoExtSize: False
+  IbiBufferDepth: 8
+  DatDepth: 16
+  DctDepth: 16
+  FrontendBusInterface: "AXI"
+  FrontendBusAddrWidth: 12
+  FrontendBusDataWidth: 32
+  FrontendBusUserWidth: 32
+  FrontendBusIdWidth: 1
+  FrontendBusIdFiltering: False
+  DisableInputFF: False
+  DisableLoopback: True
+  ControllerSupport: True
+  TargetSupport: True
