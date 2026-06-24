@@ -236,6 +236,25 @@ package i3c_pkg;
     logic [1:0]   rerror;
   } dct_mem_src_t;
 
+  // Memory port to reverse-lookup table (dynamic addr -> DAT index), dual-port
+  typedef struct packed {
+    logic             a_req;
+    logic             a_write;
+    logic [6:0]       a_addr;
+    logic [DatAw-1:0] a_wdata;
+    logic [DatAw-1:0] a_wmask;
+    logic             b_req;
+    logic             b_write;
+    logic [6:0]       b_addr;
+    logic [DatAw-1:0] b_wdata;
+    logic [DatAw-1:0] b_wmask;
+  } rlt_mem_sink_t;
+
+  typedef struct packed {
+    logic [DatAw-1:0] a_rdata;
+    logic [DatAw-1:0] b_rdata;
+  } rlt_mem_src_t;
+
   // Response error status (See TCRI 6.4.1 Table 1)
   typedef enum logic [RespErrIdWidth-1:0] {
     Success = 4'h0,

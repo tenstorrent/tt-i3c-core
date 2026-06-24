@@ -8,7 +8,6 @@
 module flow_active
   import controller_pkg::*;
   import i3c_pkg::*;
-  import prim_ram_2p_pkg::*;
 #(
     parameter int unsigned HciRespDataWidth = 32,
     parameter int unsigned HciCmdDataWidth  = 64,
@@ -84,6 +83,10 @@ module flow_active
     output logic [$clog2(`DCT_DEPTH)-1:0] dct_index_hw_o,
     output logic [                 127:0] dct_wdata_hw_o,
     input  logic [                 127:0] dct_rdata_hw_i,
+
+    // Reverse-lookup table memory interface (dynamic addr -> DAT index)
+    output rlt_mem_sink_t rlt_mem_sink_o,
+    input  rlt_mem_src_t  rlt_mem_src_i,
 
     // I2C Controller interface
     output logic host_enable_o,  // enable host functionality
@@ -397,8 +400,6 @@ module flow_active
   // dynamic address -> DAT index reverse lookup table
   assign rlt_wreq = dat_mem_sink_i.req && dat_mem_sink_i.write && (&dat_mem_sink_i.wmask[22:16]);
   // read request is valid 1 cycle after the request has been issued
-  logic [$clog2(`DAT_DEPTH)-1:0] unused_a_rdata;
-  ram_2p_cfg_rsp_t unused_cfg_rsp;
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
       rlt_valid <= 1'b0;
@@ -406,33 +407,24 @@ module flow_active
       rlt_valid <= rlt_req;
     end
   end
-  prim_ram_2p #(
-      .Width($clog2(`DAT_DEPTH)),
-      // The RLT has to have an entry for each 7-bit I3C address.
-      .Depth(128)
-  ) i_reverse_lookup_table (
-      .clk_a_i(clk_i),
-      .clk_b_i(clk_i),
 
-      // Write Port
-      .a_req_i(rlt_wreq),
-      .a_write_i(1'b1),
-      .a_addr_i(dat_mem_sink_i.wdata[22:16]), // dynamic address field of DAT entry without parity bit
-      .a_wdata_i(dat_mem_sink_i.addr),  // DAT index
-      .a_wmask_i('1),
-      .a_rdata_o(unused_a_rdata),
-
-      // Read Port
-      .b_req_i  (rlt_req),
-      .b_write_i(1'b0),
-      .b_addr_i (rlt_dynamic_address),
-      .b_wdata_i('0),
-      .b_wmask_i('0),
-      .b_rdata_o(rlt_dat_index),
-
-      .cfg_i('0),
-      .cfg_rsp_o(unused_cfg_rsp)
-  );
+  // RLT storage is exported to the top-level memory interface. Depth is fixed at 128
+  // (one entry per 7-bit I3C address); the connected RAM must match.
+  // Write Port: dynamic address -> DAT index
+  assign rlt_mem_sink_o.a_req   = rlt_wreq;
+  assign rlt_mem_sink_o.a_write = 1'b1;
+  assign rlt_mem_sink_o.a_addr  = dat_mem_sink_i.wdata[22:16];  // dynamic address without parity bit
+  assign rlt_mem_sink_o.a_wdata = dat_mem_sink_i.addr;          // DAT index
+  assign rlt_mem_sink_o.a_wmask = '1;
+  // Read Port: lookup DAT index by dynamic address
+  assign rlt_mem_sink_o.b_req   = rlt_req;
+  assign rlt_mem_sink_o.b_write = 1'b0;
+  assign rlt_mem_sink_o.b_addr  = rlt_dynamic_address;
+  assign rlt_mem_sink_o.b_wdata = '0;
+  assign rlt_mem_sink_o.b_wmask = '0;
+  assign rlt_dat_index          = rlt_mem_src_i.b_rdata;
+  logic [DatAw-1:0] unused_rlt_a_rdata;
+  assign unused_rlt_a_rdata = rlt_mem_src_i.a_rdata;
 
   // Capture command FIFO control signals
   always_ff @(posedge clk_i or negedge rst_ni) begin

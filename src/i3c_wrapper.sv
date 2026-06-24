@@ -132,6 +132,11 @@ module i3c_wrapper #(
   // DCT memory export interface
   i3c_pkg::dct_mem_src_t dct_mem_src;
   i3c_pkg::dct_mem_sink_t dct_mem_sink;
+
+  // Reverse-lookup table memory export interface
+  i3c_pkg::rlt_mem_src_t rlt_mem_src;
+  i3c_pkg::rlt_mem_sink_t rlt_mem_sink;
+  prim_ram_2p_pkg::ram_2p_cfg_rsp_t unused_rlt_cfg_rsp;
 `endif // CONTROLLER_SUPPORT
 
   i3c #(
@@ -232,6 +237,9 @@ module i3c_wrapper #(
 
       .dct_mem_src_i (dct_mem_src),
       .dct_mem_sink_o(dct_mem_sink),
+
+      .rlt_mem_src_i (rlt_mem_src),
+      .rlt_mem_sink_o(rlt_mem_sink),
 `endif // CONTROLLER_SUPPORT
 
       .recovery_payload_available_o(recovery_payload_available_o),
@@ -278,6 +286,34 @@ module i3c_wrapper #(
       .rvalid_o(dct_mem_src.rvalid),  // Unused
       .rerror_o(dct_mem_src.rerror),  // Unused
       .cfg_i('0)  // Unused
+  );
+
+  prim_ram_2p #(
+      .Width($clog2(`DAT_DEPTH)),
+      // The RLT has to have an entry for each 7-bit I3C address.
+      .Depth(128)
+  ) rlt_memory (
+      .clk_a_i(clk_i),
+      .clk_b_i(clk_i),
+
+      // Write Port
+      .a_req_i(rlt_mem_sink.a_req),
+      .a_write_i(rlt_mem_sink.a_write),
+      .a_addr_i(rlt_mem_sink.a_addr),
+      .a_wdata_i(rlt_mem_sink.a_wdata),
+      .a_wmask_i(rlt_mem_sink.a_wmask),
+      .a_rdata_o(rlt_mem_src.a_rdata),  // Unused
+
+      // Read Port
+      .b_req_i(rlt_mem_sink.b_req),
+      .b_write_i(rlt_mem_sink.b_write),
+      .b_addr_i(rlt_mem_sink.b_addr),
+      .b_wdata_i(rlt_mem_sink.b_wdata),
+      .b_wmask_i(rlt_mem_sink.b_wmask),
+      .b_rdata_o(rlt_mem_src.b_rdata),
+
+      .cfg_i('0),  // Unused
+      .cfg_rsp_o(unused_rlt_cfg_rsp)  // Unused
   );
 `endif // CONTROLLER_SUPPORT
 

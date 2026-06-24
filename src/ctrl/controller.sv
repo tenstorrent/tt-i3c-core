@@ -140,6 +140,10 @@ module controller
     output logic [    127:0] dct_wdata_hw_o,
     input  logic [    127:0] dct_rdata_hw_i,
 
+    // Reverse-lookup table memory interface (dynamic addr -> DAT index)
+    output rlt_mem_sink_t rlt_mem_sink_o,
+    input  rlt_mem_src_t  rlt_mem_src_i,
+
 `endif  // CONTROLLER_SUPPORT
 `ifdef TARGET_SUPPORT
     // Target Transaction Interface
@@ -576,6 +580,8 @@ module controller
       .dct_index_hw_o              (dct_index_hw_o),
       .dct_wdata_hw_o              (dct_wdata_hw_o),
       .dct_rdata_hw_i              (dct_rdata_hw_i),
+      .rlt_mem_sink_o              (rlt_mem_sink_o),
+      .rlt_mem_src_i               (rlt_mem_src_i),
       .i3c_fsm_en_i                (i3c_active_en),
       .i3c_fsm_idle_o              (i3c_fsm_idle_o),
       .resume_i                    (resume),

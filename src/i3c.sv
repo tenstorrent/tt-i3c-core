@@ -204,6 +204,10 @@ module i3c
     // DCT memory export interface
     input  dct_mem_src_t  dct_mem_src_i,
     output dct_mem_sink_t dct_mem_sink_o,
+
+    // Reverse-lookup table memory export interface (dynamic addr -> DAT index)
+    input  rlt_mem_src_t  rlt_mem_src_i,
+    output rlt_mem_sink_t rlt_mem_sink_o,
 `endif  // CONTROLLER_SUPPORT
 
     // Recovery interface signals
@@ -762,6 +766,10 @@ module i3c
       .dct_index_hw_o(dct_index_hw),
       .dct_wdata_hw_o(dct_wdata_hw),
       .dct_rdata_hw_i(dct_rdata_hw),
+
+      // Reverse-lookup table memory interface
+      .rlt_mem_sink_o(rlt_mem_sink_o),
+      .rlt_mem_src_i (rlt_mem_src_i),
 `endif
       .i3c_fsm_en_i(i3c_fsm_en_i),
       .i3c_fsm_idle_o(i3c_fsm_idle_o),

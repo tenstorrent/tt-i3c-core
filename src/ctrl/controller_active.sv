@@ -103,6 +103,10 @@ module controller_active
     output logic [                 127:0] dct_wdata_hw_o,
     input  logic [                 127:0] dct_rdata_hw_i,
 
+    // Reverse-lookup table memory interface (dynamic addr -> DAT index)
+    output rlt_mem_sink_t rlt_mem_sink_o,
+    input  rlt_mem_src_t  rlt_mem_src_i,
+
     input  logic i3c_fsm_en_i,
     output logic i3c_fsm_idle_o,
     input  logic pio_rs_i,
@@ -234,6 +238,8 @@ module controller_active
       .dct_index_hw_o,
       .dct_wdata_hw_o,
       .dct_rdata_hw_i,
+      .rlt_mem_sink_o,
+      .rlt_mem_src_i,
       .host_enable_o             (host_enable),
       .is_i2c_transfer_o         (is_i2c_transfer),
       .i2c_cmd_complete_i        (event_cmd_complete),
