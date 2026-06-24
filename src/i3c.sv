@@ -1031,6 +1031,7 @@ module i3c
       .tx_desc_queue_data_o        (csr_tti_tx_desc_data),
       .tx_desc_queue_ready_thld_o  (csr_tti_tx_desc_ready_thld_i),
       .tx_desc_queue_ready_thld_i  (csr_tti_tx_desc_ready_thld_o),
+      .tx_desc_queue_ready_thld_trig_i(tti_tx_desc_ready_thld_trig),
       .tx_desc_queue_reg_rst_o     (csr_tti_tx_desc_reg_rst),
       .tx_desc_queue_reg_rst_we_i  (csr_tti_tx_desc_reg_rst_we),
       .tx_desc_queue_reg_rst_data_i(csr_tti_tx_desc_reg_rst_data),
@@ -1063,6 +1064,7 @@ module i3c
       .tx_data_queue_reg_rst_we_i  (csr_tti_tx_data_reg_rst_we),
       .tx_data_queue_reg_rst_data_i(csr_tti_tx_data_reg_rst_data),
       .tx_data_queue_full_i        (csr_tti_tx_data_full),
+      .tx_data_queue_ready_thld_trig_i(tti_tx_ready_thld_trig),
 
       // TTI In-band Interrupt (IBI) queue
       .ibi_queue_full_i        (tti_ibi_full),
@@ -1071,6 +1073,7 @@ module i3c
       .ibi_queue_ack_i         (csr_tti_ibi_ack),
       .ibi_queue_data_o        (csr_tti_ibi_data),
       .ibi_queue_ready_thld_o  (csr_tti_ibi_ready_thld),
+      .ibi_queue_ready_thld_trig_i(tti_ibi_ready_thld_trig),
       .ibi_queue_reg_rst_o     (csr_tti_ibi_reg_rst),
       .ibi_queue_reg_rst_we_i  (csr_tti_ibi_reg_rst_we),
       .ibi_queue_reg_rst_data_i(csr_tti_ibi_reg_rst_data),

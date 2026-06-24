@@ -60,6 +60,7 @@ module tti
     output logic [RxDescDataWidth-1:0] tx_desc_queue_data_o,
     output logic [RxDescThldWidth-1:0] tx_desc_queue_ready_thld_o,
     input  logic [RxDescThldWidth-1:0] tx_desc_queue_ready_thld_i,
+    input  logic                       tx_desc_queue_ready_thld_trig_i,
     output logic                       tx_desc_queue_reg_rst_o,
     input  logic                       tx_desc_queue_reg_rst_we_i,
     input  logic                       tx_desc_queue_reg_rst_data_i,
@@ -72,6 +73,7 @@ module tti
     output logic [RxThldWidth-1:0] tx_data_queue_start_thld_o,
     output logic [RxThldWidth-1:0] tx_data_queue_ready_thld_o,
     input  logic [RxThldWidth-1:0] tx_data_queue_ready_thld_i,
+    input  logic                   tx_data_queue_ready_thld_trig_i,
     output logic                   tx_data_queue_reg_rst_o,
     input  logic                   tx_data_queue_reg_rst_we_i,
     input  logic                   tx_data_queue_reg_rst_data_i,
@@ -84,6 +86,7 @@ module tti
     input  logic                    ibi_queue_ack_i,
     output logic [CsrDataWidth-1:0] ibi_queue_data_o,
     output logic [IbiThldWidth-1:0] ibi_queue_ready_thld_o,
+    input  logic                    ibi_queue_ready_thld_trig_i,
     output logic                    ibi_queue_reg_rst_o,
     input  logic                    ibi_queue_reg_rst_we_i,
     input  logic                    ibi_queue_reg_rst_data_i,
@@ -270,12 +273,6 @@ module tti
     hwif_tti_o.INTERRUPT_STATUS.RX_DESC_TIMEOUT.we = '0; // FUTUREFIX: Nice to have in the future
     hwif_tti_o.INTERRUPT_STATUS.TX_DESC_TIMEOUT.next = '0;
     hwif_tti_o.INTERRUPT_STATUS.TX_DESC_TIMEOUT.we = '0; // FUTUREFIX: Nice to have in the future
-    hwif_tti_o.INTERRUPT_STATUS.TX_DATA_THLD_STAT.next = '0;
-    hwif_tti_o.INTERRUPT_STATUS.TX_DATA_THLD_STAT.we = '0; // FUTUREFIX: Not important since FW owns this queue
-    hwif_tti_o.INTERRUPT_STATUS.TX_DESC_THLD_STAT.next = '0;
-    hwif_tti_o.INTERRUPT_STATUS.TX_DESC_THLD_STAT.we = '0; // FUTUREFIX: Not important since FW owns this queue
-    hwif_tti_o.INTERRUPT_STATUS.IBI_THLD_STAT.next = '0;
-    hwif_tti_o.INTERRUPT_STATUS.IBI_THLD_STAT.we = '0; // FUTUREFIX: Not important since FW owns this queue
     hwif_tti_o.INTERRUPT_STATUS.TRANSFER_ABORT_STAT.next = '0;
     hwif_tti_o.INTERRUPT_STATUS.TRANSFER_ABORT_STAT.we = '0; // FUTUREFIX: Implement at the end if easy to add
     hwif_tti_o.INTERRUPT_STATUS.TRANSFER_ERR_STAT.next = '0;
@@ -315,8 +312,10 @@ module tti
 
   // Interrupts: [5:0] = TTI queue interrupts, [12:6] = TE error interrupts + framing,
   //             [16:13] = Recovery errors (PEC, LENGTH, READONLY, UNSUPPORTED),
-  //             [18:17] = Recovery FIFO overflow errors (TX_FIFO, INDIRECT_FIFO)
-  logic [18:0] irqs;
+  //             [18:17] = Recovery FIFO overflow errors (TX_FIFO, INDIRECT_FIFO),
+  //             [19] = TX data queue threshold, [20] = TX desc queue threshold,
+  //             [21] = IBI queue threshold
+  logic [21:0] irqs;
 
   // Delay queue write monitor signals by 1 cycle to align them with
   // full/empty/threshold trigger update.
@@ -433,6 +432,57 @@ module tti
     .sts_ena_i      (hwif_tti_i.INTERRUPT_ENABLE.TX_DESC_STAT_EN.value),
     .sig_ena_i      ('1),
     .irq_o          (irqs[5])
+  );
+
+  // TX_DATA_THLD_STAT
+  // set: TX data queue free space reached TX_DATA_THLD
+  // clr: None, need to clear via INTERRUPT_STATUS
+  interrupt xintr6 (
+    .clk_i          (clk_i),
+    .rst_ni         (rst_ni),
+    .irq_i          (~virtual_device_sel_i & tx_data_queue_ready_thld_trig_i),
+    .clr_i          ('0),
+    .irq_force_i    (hwif_tti_i.INTERRUPT_FORCE.TX_DATA_THLD_FORCE.value),
+    .sts_o          (hwif_tti_o.INTERRUPT_STATUS.TX_DATA_THLD_STAT.next),
+    .sts_we_o       (hwif_tti_o.INTERRUPT_STATUS.TX_DATA_THLD_STAT.we),
+    .sts_i          (hwif_tti_i.INTERRUPT_STATUS.TX_DATA_THLD_STAT.value),
+    .sts_ena_i      (hwif_tti_i.INTERRUPT_ENABLE.TX_DATA_THLD_STAT_EN.value),
+    .sig_ena_i      ('1),
+    .irq_o          (irqs[19])
+  );
+
+  // TX_DESC_THLD_STAT
+  // set: TX desc queue free space reached TX_DESC_THLD
+  // clr: None, need to clear via INTERRUPT_STATUS
+  interrupt xintr7 (
+    .clk_i          (clk_i),
+    .rst_ni         (rst_ni),
+    .irq_i          (~virtual_device_sel_i & tx_desc_queue_ready_thld_trig_i),
+    .clr_i          ('0),
+    .irq_force_i    (hwif_tti_i.INTERRUPT_FORCE.TX_DESC_THLD_FORCE.value),
+    .sts_o          (hwif_tti_o.INTERRUPT_STATUS.TX_DESC_THLD_STAT.next),
+    .sts_we_o       (hwif_tti_o.INTERRUPT_STATUS.TX_DESC_THLD_STAT.we),
+    .sts_i          (hwif_tti_i.INTERRUPT_STATUS.TX_DESC_THLD_STAT.value),
+    .sts_ena_i      (hwif_tti_i.INTERRUPT_ENABLE.TX_DESC_THLD_STAT_EN.value),
+    .sig_ena_i      ('1),
+    .irq_o          (irqs[20])
+  );
+
+  // IBI_THLD_STAT
+  // set: IBI queue free space reached IBI_THLD
+  // clr: None, need to clear via INTERRUPT_STATUS
+  interrupt xintr8 (
+    .clk_i          (clk_i),
+    .rst_ni         (rst_ni),
+    .irq_i          (~virtual_device_sel_i & ibi_queue_ready_thld_trig_i),
+    .clr_i          ('0),
+    .irq_force_i    (hwif_tti_i.INTERRUPT_FORCE.IBI_THLD_FORCE.value),
+    .sts_o          (hwif_tti_o.INTERRUPT_STATUS.IBI_THLD_STAT.next),
+    .sts_we_o       (hwif_tti_o.INTERRUPT_STATUS.IBI_THLD_STAT.we),
+    .sts_i          (hwif_tti_i.INTERRUPT_STATUS.IBI_THLD_STAT.value),
+    .sts_ena_i      (hwif_tti_i.INTERRUPT_ENABLE.IBI_THLD_STAT_EN.value),
+    .sig_ena_i      ('1),
+    .irq_o          (irqs[21])
   );
 
   // ===========================================================================
