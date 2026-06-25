@@ -1124,6 +1124,11 @@ module flow_active
                 resp_err_status_d = (cmd_ccc == CCC_DIRECT_SETDASA) ? NotSupported : Success;  // SETDASA is only supported with address assignment cmd desc
               end
             end else begin
+              // (OCA) complete an immediate CCC at cnt=3 when its
+              // only payload byte is sent here — a whitelisted 1-byte CCC, or a defining-byte-only
+              // CCC (dtt=5 => defining byte + 0 data, e.g. RSTACT). Multi-byte CCCs continue at cnt>=4.
+              ccc_last_trans = ccc_has_one_byte_of_payload(cmd_ccc) | (transfer_cnt_q == (imm_use_def_byte ? (data_length + 3) : (data_length + 2)));
+              ccc_done = ccc_last_trans & transfer_cnt_en;
               fmt_byte_o = (cmd_ccc == CCC_DIRECT_SETDASA) ? {dat_rdata.dynamic_address, 1'b0} : (is_direct_transfer ? immediate_direct_cmd_desc.def_or_data_byte1 : immediate_dat_cmd_desc.def_or_data_byte1);
               fmt_bit_o = ^{fmt_byte_o, 1'b1};
               if (ccc_last_trans) begin
@@ -1188,9 +1193,36 @@ module flow_active
                 resp_err_status_d = Success;
               end
             end else begin
-              // Should not use immediate transfer descriptors for GET CCCs
-              ccc_done = 1'b1;
-              resp_err_status_d = NotSupported;
+              // (OCA) immediate multi-byte directed SET CCC
+              // payload (e.g. SETMWL=2B, SETMRL=3B). cnt=3 already sent def_or_data_byte1; send the
+              // remaining data bytes here and complete with Success. Immediate GET CCCs (which
+              // should not use an immediate descriptor) remain NotSupported.
+              if (cmd_dir == Read) begin
+                ccc_done = 1'b1;
+                resp_err_status_d = NotSupported;
+              end else begin
+                ccc_last_trans = (transfer_cnt_q == (imm_use_def_byte ? (data_length + 3) : (data_length + 2)));
+                ccc_done = ccc_last_trans & transfer_cnt_en;
+                unique case (transfer_cnt_q)
+                  32'd4:   fmt_byte_o = is_direct_transfer ? immediate_direct_cmd_desc.data_byte2 : immediate_dat_cmd_desc.data_byte2;
+                  32'd5:   fmt_byte_o = is_direct_transfer ? immediate_direct_cmd_desc.data_byte3 : immediate_dat_cmd_desc.data_byte3;
+                  32'd6:   fmt_byte_o = is_direct_transfer ? immediate_direct_cmd_desc.data_byte4 : immediate_dat_cmd_desc.data_byte4;
+                  default: fmt_byte_o = '0;
+                endcase
+                fmt_bit_o = ^{fmt_byte_o, 1'b1};
+                if (ccc_last_trans) begin
+                  fmt_flag_stop_after_o = is_direct_transfer ? immediate_direct_cmd_desc.toc : immediate_dat_cmd_desc.toc;
+                  fmt_flag_restart_after_o = is_direct_transfer ? ~immediate_direct_cmd_desc.toc : ~immediate_dat_cmd_desc.toc;
+                  prev_cmd_toc_d = ~fmt_flag_restart_after_o;
+                  if (fmt_fifo_rdone_i & fmt_flag_restart_after_o & ~cmd_queue_rvalid_i) begin
+                    fmt_flag_stop_after_o = 1'b1;
+                    fmt_flag_restart_after_o = 1'b0;
+                    hc_seq_cancel_stat = 1'b1;
+                    hc_err_cmd_seq_timeout_stat = 1'b1;
+                  end
+                  resp_err_status_d = Success;
+                end
+              end
             end
           end
           default: begin
@@ -1337,6 +1369,9 @@ module flow_active
               end
             end else if (fmt_fifo_rdone_i && (assigned_addr_cnt_q >= addr_cmd_desc.dev_count)) begin // there are more devices still on the bus
               ccc_done = 1'b1;
+              // (OCA) issue the STOP when DAA terminates because all
+              // dev_count requested addresses have been assigned (NOT only on the NACK branch above). 
+              fmt_flag_stop_after_o = 1'b1;
               resp_err_status_d = Success;
               resp_data_length_d = 16'd1; // according to I3C HCI Spec this indicates that at least 1 device has not yet been assigned a dynamic address
             end
@@ -1473,6 +1508,7 @@ module flow_active
             ibi_status_d.status_type = RegularIBI;
             ibi_status_d.ts = 1'b0;
             ibi_status_d.last_status = 1'b1; // TODO: #95758 some IBIs require multiple IBI status desc according to HCI Spec
+            ibi_status_d.data_length = '0; // (OCA) reset the per-IBI data_length at the start of each IBI.
             if (ibi_abort) begin
               fmt_flag_stop_after_o = 1'b1;
               fmt_flag_read_bytes_o = 1'b0;
@@ -1480,7 +1516,8 @@ module flow_active
               ibi_status_d.ibi_sts = 1'b1;
               ibi_wb_d = fmt_fifo_rdone_i;
             end
-            ibi_status_d.ibi_id = fmt_flag_read_valid_i ? fmt_byte_i : ibi_status_q.ibi_id;
+            // (OCA) the IBI Status Descriptor IBI_ID field carries the target's 7-bit dynamic address
+            ibi_status_d.ibi_id = fmt_flag_read_valid_i ? {1'b0, fmt_byte_i[7:1]} : ibi_status_q.ibi_id;
             rlt_req = fmt_flag_read_valid_i;
             rlt_dynamic_address = fmt_flag_read_valid_i ? 7'(fmt_byte_i >> 1) : 7'h0;
             // Fetch DAT for next cycle
@@ -1558,6 +1595,9 @@ module flow_active
                 err_handled_d = 1'b1;  // hdr exit pattern was sent
                 resp_err_status_d = AbortedWithCRC;
               end
+            end else begin
+              // (OCA) need to mark as handled otherwise it will stuck in Error forever
+              err_handled_d = 1'b1;
             end
           end
           Ovl: begin
@@ -1626,7 +1666,9 @@ module flow_active
                            (fmt_fifo_rready_i ? ((broadcast_addr_enable_q & prev_cmd_toc_q) ? I3CBcastHeader : I3CWriteImmediate) : state);
             end
             RegularTransferDirect: begin
-              state_next = cmd_is_ccc & fmt_fifo_rready_i ? (cmd_is_broadcast_ccc ? BroadcastCCC : DirectCCC) :
+              // (OCA) a CCC must never fall through to the private I3CRead/I3CWriteRegular path. 
+              // When fmt FIFO is momentarily not ready, stall in FetchAddr 
+              state_next = cmd_is_ccc ? (fmt_fifo_rready_i ? (cmd_is_broadcast_ccc ? BroadcastCCC : DirectCCC) : state) :
                            i2c_cmd & fmt_fifo_rready_i ? ((cmd_dir == Read) ? I2CRead : I2CWriteRegular) : 
                            ((broadcast_addr_enable_q & prev_cmd_toc_q) ? I3CBcastHeader : 
                           (cmd_dir == Read) ? I3CRead : (fmt_fifo_rready_i ? I3CWriteRegular : state));
@@ -1648,7 +1690,8 @@ module flow_active
                            (fmt_fifo_rready_i ? ((broadcast_addr_enable_q & prev_cmd_toc_q) ? I3CBcastHeader : I3CWriteImmediate) : state);
               end
               RegularTransferDAT: begin
-                state_next = cmd_is_ccc & fmt_fifo_rready_i ? (cmd_is_broadcast_ccc ? BroadcastCCC : DirectCCC) :
+                // (OCA) a CCC must not fall through to the private I3CRead path; stall in FetchAddr until the fmt FIFO is ready.
+                state_next = cmd_is_ccc ? (fmt_fifo_rready_i ? (cmd_is_broadcast_ccc ? BroadcastCCC : DirectCCC) : state) :
                            i2c_cmd & fmt_fifo_rready_i ? ((cmd_dir == Read) ? I2CRead : I2CWriteRegular) : 
                           ((broadcast_addr_enable_q & prev_cmd_toc_q) ? I3CBcastHeader : 
                           (cmd_dir == Read) ? I3CRead : (fmt_fifo_rready_i ? I3CWriteRegular : state));
@@ -1801,7 +1844,8 @@ module flow_active
         end
       end
       Error: begin
-        if (~resume_i & err_handled_q) begin  // the driver has cleared the RESUME field in the HC_CONTROL CSR.
+        // (OCA) a HANDLED error auto-recovers to Idle without requiring the driver to clear HC_CONTROL.RESUME. The original gate `~resume_i & err_handled_q` deadlocks
+        if (err_handled_q) begin
           state_next = Idle;
         end
       end

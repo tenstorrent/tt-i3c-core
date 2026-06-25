@@ -141,18 +141,16 @@ module i3c_controller_fsm
     if ((phy_sel_od_pp_q == 1'b0) && (state_q != Address)) begin // all I3C transactions except first address after Start are in Push-Pull Mode
       phy_sel_od_pp_d = 1'b1;
     end
-    if ((state_q == Idle) || (state_q == Start) || (state_q == BusRX) || (state_q == BusReadContinuous) || (state_q == IBI)) begin
+    // (OCA) Address and ReStart held in OD mode; replaces the separate Address & bus_rx_req_bit gate
+    if ((state_q == Idle) || (state_q == Address) || (state_q == Start) || (state_q == BusRX) || (state_q == BusReadContinuous) || (state_q == IBI) || (state_q == ReStart)) begin
       phy_sel_od_pp_d = 1'b0;
-    end
-    if ((state_q == Address) & bus_rx_req_bit) begin
-      phy_sel_od_pp_d = 1'b0;  // When waiting for ACK we are in OD Mode
     end
   end
 
-  // phy_sel_od_pp should only change when SCL is low to prevent SDA changing
+  // (OCA) phy_sel_od_pp should only change when SCL is low to prevent SDA changing
   // while SCL is high. That's why we wait until scl is low to update the
   // phy_sel_od_pp_o signal
-  assign phy_sel_od_pp_real_d = scl_stable_low || (start_stop_active && (start_stop_scl == 1'b0)) || (state_q == HDRExit) ? phy_sel_od_pp_q : phy_sel_od_pp_real_q;
+  assign phy_sel_od_pp_real_d = scl_stable_low || (start_stop_active && (start_stop_scl == 1'b0)) || (state_q == HDRExit) ? phy_sel_od_pp_d : phy_sel_od_pp_real_q;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
@@ -164,6 +162,18 @@ module i3c_controller_fsm
     end
   end
 
+  // (OCA) need to latch ack during ack period since switching to pp mode has it immediately 
+  // giving up control of the line, in which the ack can be mistaken as a nack if not latched
+  logic ack_sda_low_seen_q;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (~rst_ni) begin
+      ack_sda_low_seen_q <= 1'b0;
+    end else if ((state_q == Address) & tx_bit_q) begin
+      if (~phy_sel_od_pp_o & ~ctrl_sda_i) ack_sda_low_seen_q <= 1'b1;
+    end else begin
+      ack_sda_low_seen_q <= 1'b0;
+    end
+  end
 
   // Bus initialization
   logic bus_init_d, bus_init_q;
@@ -317,7 +327,8 @@ module i3c_controller_fsm
           //bus_tx_req_value = {7'b0, 1'b1};
           // Read bus to check for NACK
           bus_rx_req_bit = 1'b1;
-          received_nack_d = bus_rx_data[0] & bus_rx_done;
+          // (OCA) only counts as a nack if it was never pulled down
+          received_nack_d = bus_rx_data[0] & bus_rx_done & ~ack_sda_low_seen_q;
 
           if (bus_rx_done) begin
             tx_bit_d = 1'b0;
@@ -343,6 +354,10 @@ module i3c_controller_fsm
           end
         end
         bus_rx_req_byte = ~phy_sel_od_pp_o & ~bus_rx_req_bit;  // In OD mode read the addr just in case an IBI happens
+        // (OCA) covers any transients when in the Address state and prev transactions was a push pull
+        if (tx_bit_d & phy_sel_od_pp_o & ~bus_rx_done) begin
+          ctrl_sda_o = 1'b0;
+        end
       end
       BusTX: begin
         if (bus_init_q) begin
@@ -532,7 +547,9 @@ module i3c_controller_fsm
     // state
     if (((state_q == Address) || ((state_q == Idle) && bus_available)) && (phy_sel_od_pp_o == 1'b0) && (bus_rx_req_bit == 1'b0)) begin
       if (ctrl_bus_i.scl.stable_high & scl_stable_high) begin
-        fmt_sda_arbitration_o = ctrl_bus_i.sda.value ^ ctrl_sda_o;
+        // (OCA) only count as arbitration lost when external agent pulled SDA line while SCL high
+        // -> cannot use XOR as it would misdetect current controller puling sda low
+        fmt_sda_arbitration_o = ctrl_sda_o & ~ctrl_bus_i.sda.value;
       end
     end
   end
@@ -557,7 +574,8 @@ module i3c_controller_fsm
 
   // SDA driver
   logic unassigned_bus_sel_od_pp;
-  assign bus_tx_sel_od_pp = 1'b0;  // UNUSED
+  // (OCA) drive bus TX OD/PP select from phy_sel_od_pp_o instead of the hardwired 1'b0
+  assign bus_tx_sel_od_pp = phy_sel_od_pp_o;
   ctrl_bus_tx_flow i_bus_tx_flow (
       .clk_i,
       .rst_ni,

@@ -114,7 +114,8 @@ module ctrl_bus_tx (
   assign tx_idle_o = (state_q == Idle);
 
   always_comb begin : tx_fsm_outputs
-    sda_o = '1;
+    // (OCA) hold previous value on sda line, ... 
+    sda_o = drive_value_i;
     tx_done_o = '0;  // Assign to 1 only after transmitting a bit
     load_tcount = '0;
     tcount_sel = tNoDelay;
@@ -127,6 +128,9 @@ module ctrl_bus_tx (
           if (t_sd_z & (scl_stable_low_i | scl_negedge_i)) begin
             sda_o = drive_value_i;
           end
+        end else begin
+          // (OCA) ... only when truly idle should the line be released
+          sda_o = 1'b1;
         end
       end
       AwaitClockNegedge: begin
