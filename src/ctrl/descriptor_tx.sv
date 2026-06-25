@@ -93,6 +93,7 @@ module descriptor_tx import i3c_pkg::*; #(
     end
   end
 
+  // (OCA) data length is in TX descriptor bits [31:16], not [15:0]
   assign data_len       = tx_descriptor[31:16];
   assign data_len_words = TtiTxDescDataWidth'(data_len >> 2);
   // Add 1 to depth, because there is one word in the Nto8 converter
