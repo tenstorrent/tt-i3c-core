@@ -355,8 +355,10 @@ module i3c_controller_fsm
         end
         bus_rx_req_byte = ~phy_sel_od_pp_o & ~bus_rx_req_bit;  // In OD mode read the addr just in case an IBI happens
         // (OCA) covers any transients when in the Address state and prev transactions was a push pull
-        if (tx_bit_d & phy_sel_od_pp_o & ~bus_rx_done) begin
-          ctrl_sda_o = 1'b0;
+        if (tx_bit_d & ~bus_rx_done) begin
+          if (phy_sel_od_pp_o)          ctrl_sda_o = 1'b0;  // PP: original guard
+          else if (ack_sda_low_seen_q)  ctrl_sda_o = 1'b0;  // OD: target ACK observed -> hold low thru posedge
+          else                          ctrl_sda_o = 1'b1;  // OD: release so target drives (NACK still detectable)
         end
       end
       BusTX: begin
