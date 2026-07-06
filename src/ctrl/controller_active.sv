@@ -198,6 +198,7 @@ module controller_active
       .cmd_queue_rready_o,
       .cmd_queue_rdata_i,
       .rx_queue_full_i,
+      .rx_queue_depth_i,    // (OCA) new port into flow_active
       .rx_queue_start_thld_i,
       .rx_queue_start_thld_trig_i,
       .rx_queue_ready_thld_i,
@@ -207,6 +208,7 @@ module controller_active
       .rx_queue_wready_i,
       .rx_queue_wdata_o,
       .tx_queue_full_i,
+      .tx_queue_depth_i,    // (OCA) new port into flow_active
       .tx_queue_start_thld_i,
       .tx_queue_start_thld_trig_i,
       .tx_queue_ready_thld_i,

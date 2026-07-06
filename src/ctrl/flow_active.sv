@@ -13,6 +13,8 @@ module flow_active
     parameter int unsigned HciCmdDataWidth  = 64,
     parameter int unsigned HciRxDataWidth   = 32,
     parameter int unsigned HciTxDataWidth   = 32,
+    parameter int unsigned HciRxFifoDepthWidth = $clog2(`RX_FIFO_DEPTH + 1),  // (OCA) pass in RX FIFO depth width
+    parameter int unsigned HciTxFifoDepthWidth = $clog2(`TX_FIFO_DEPTH + 1),  // (OCA) pass in TX FIFO depth width
     parameter int unsigned HciIbiDataWidth  = 32,
 
     parameter int unsigned HciRespThldWidth = 8,
@@ -35,6 +37,7 @@ module flow_active
     input logic [HciCmdDataWidth-1:0] cmd_queue_rdata_i,
     // RX FIFO
     input logic rx_queue_full_i,
+    input logic [HciRxFifoDepthWidth-1:0] rx_queue_depth_i, // (OCA) RX queue current depth
     input logic [HciRxThldWidth-1:0] rx_queue_start_thld_i,
     input logic rx_queue_start_thld_trig_i,
     input logic [HciRxThldWidth-1:0] rx_queue_ready_thld_i,
@@ -45,6 +48,7 @@ module flow_active
     output logic [HciRxDataWidth-1:0] rx_queue_wdata_o,
     // TX FIFO
     input logic tx_queue_full_i,
+    input logic [HciTxFifoDepthWidth-1:0] tx_queue_depth_i, // (OCA) TX queue current depth
     input logic [HciTxThldWidth-1:0] tx_queue_start_thld_i,
     input logic tx_queue_start_thld_trig_i,
     input logic [HciTxThldWidth-1:0] tx_queue_ready_thld_i,
@@ -215,6 +219,14 @@ module flow_active
   logic imm_use_def_byte;
   logic is_direct_transfer;
   logic is_regular_transfer;
+  logic tx_xfer_startable;
+  logic rx_xfer_startable;
+  // TX - a transfer can start if: 1. amount of data in the queue is greater than the length of the transfer
+  //                               2. amount of data in the queue is greater than the start threshold
+  assign tx_xfer_startable = ((32'(tx_queue_depth_i) * 32'd4) >= 32'(data_length)) ||
+                             tx_queue_start_thld_trig_i;
+  assign rx_xfer_startable = (((32'(`RX_FIFO_DEPTH) - 32'(rx_queue_depth_i)) * 32'd4) >= 32'(data_length)) ||
+                             rx_queue_start_thld_trig_i;
 
   // Generic incremental counter
   logic [31:0] transfer_cnt_q, transfer_cnt_d;
@@ -1668,10 +1680,15 @@ module flow_active
             RegularTransferDirect: begin
               // (OCA) a CCC must never fall through to the private I3CRead/I3CWriteRegular path. 
               // When fmt FIFO is momentarily not ready, stall in FetchAddr 
+              // (OCA) regular transfers additionally stall here until
+              // tx/rx_xfer_startable (see their definition above).
               state_next = cmd_is_ccc ? (fmt_fifo_rready_i ? (cmd_is_broadcast_ccc ? BroadcastCCC : DirectCCC) : state) :
-                           i2c_cmd & fmt_fifo_rready_i ? ((cmd_dir == Read) ? I2CRead : I2CWriteRegular) : 
-                           ((broadcast_addr_enable_q & prev_cmd_toc_q) ? I3CBcastHeader : 
-                          (cmd_dir == Read) ? I3CRead : (fmt_fifo_rready_i ? I3CWriteRegular : state));
+                           i2c_cmd & fmt_fifo_rready_i ? ((cmd_dir == Read) ? (rx_xfer_startable ? I2CRead : state)
+                                                                            : (tx_xfer_startable ? I2CWriteRegular : state)) :
+                           ((broadcast_addr_enable_q & prev_cmd_toc_q) ?
+                              (((cmd_dir == Read) ? rx_xfer_startable : tx_xfer_startable) ? I3CBcastHeader : state) :
+                          (cmd_dir == Read) ? (rx_xfer_startable ? I3CRead : state)
+                                            : ((fmt_fifo_rready_i & tx_xfer_startable) ? I3CWriteRegular : state));
             end
             ComboTransferDirect: begin
               // TODO: #95759 implement combo transfer command descriptor
@@ -1691,10 +1708,14 @@ module flow_active
               end
               RegularTransferDAT: begin
                 // (OCA) a CCC must not fall through to the private I3CRead path; stall in FetchAddr until the fmt FIFO is ready.
+                // (OCA) regular transfers additionally stall here until tx/rx_xfer_startable (see their definition above).
                 state_next = cmd_is_ccc ? (fmt_fifo_rready_i ? (cmd_is_broadcast_ccc ? BroadcastCCC : DirectCCC) : state) :
-                           i2c_cmd & fmt_fifo_rready_i ? ((cmd_dir == Read) ? I2CRead : I2CWriteRegular) : 
-                          ((broadcast_addr_enable_q & prev_cmd_toc_q) ? I3CBcastHeader : 
-                          (cmd_dir == Read) ? I3CRead : (fmt_fifo_rready_i ? I3CWriteRegular : state));
+                           i2c_cmd & fmt_fifo_rready_i ? ((cmd_dir == Read) ? (rx_xfer_startable ? I2CRead : state)
+                                                                            : (tx_xfer_startable ? I2CWriteRegular : state)) :
+                          ((broadcast_addr_enable_q & prev_cmd_toc_q) ?
+                             (((cmd_dir == Read) ? rx_xfer_startable : tx_xfer_startable) ? I3CBcastHeader : state) :
+                          (cmd_dir == Read) ? (rx_xfer_startable ? I3CRead : state)
+                                            : ((fmt_fifo_rready_i & tx_xfer_startable) ? I3CWriteRegular : state));
               end
               ComboTransferDAT: begin
                 // TODO: #95759 implement combo transfer command descriptor
