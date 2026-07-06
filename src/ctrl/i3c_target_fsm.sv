@@ -203,6 +203,8 @@ module i3c_target_fsm import i3c_pkg::*; (
     RxPWriteTbit,
     // Send data in Private Read transfer
     TxPReadData,
+    // (OCA): decide Cont vs End AFTER the byte pop, when tx_fifo_rvalid_i reflects the NEXT byte's availability (streaming TX)
+    TxPReadTbitSel,
     // Signal to Controller in Tbit to transfer more bytes
     TxPReadTbitCont,
     // Signal to Controller in Tbit to end the transfer
@@ -241,6 +243,9 @@ module i3c_target_fsm import i3c_pkg::*; (
 
   primary_state_e state_q, state_d;
 
+  logic       pr_last_q;
+  logic       pr_underrun_q;
+  logic [2:0] pr_ur_wait_q;
 
   // Either Start or RStart condition
   assign bus_any_start_det = bus_start_det_i || bus_rstart_det_i;
@@ -755,8 +760,21 @@ module i3c_target_fsm import i3c_pkg::*; (
         if (bus_tx_rsp_i.done) begin
           // Acknowledge consumption of current byte
           tx_fifo_rready_o = 1'b1;
-          // Signal continue or end of read
-          state_d = tx_last_byte_i ? TxPReadTbitEnd : TxPReadTbitCont;
+          // (OCA): decide Cont/End one cycle later as tx_fifo_rvalid_i
+          //        is only qualified in the next cycle
+          state_d = TxPReadTbitSel;
+        end
+      end
+      // (OCA): new state
+      TxPReadTbitSel: begin
+        if (pr_last_q) begin
+          state_d = TxPReadTbitEnd;                 // normal end (byte counter done)
+        end else if (tx_fifo_rvalid_i) begin
+          state_d = TxPReadTbitCont;                // next byte ready -> continue
+        end else if (&pr_ur_wait_q) begin
+          // All 1s, timed out waiting for refill, underrun occured
+          // -> end the read 
+          state_d = TxPReadTbitEnd;
         end
       end
       TxPReadTbitEnd: begin
@@ -764,6 +782,9 @@ module i3c_target_fsm import i3c_pkg::*; (
         bus_tx_req_o.req_type  = TReadEnd;
 
         if (bus_tx_rsp_i.done) begin
+          // (OCA): on an underrun-terminated read, abort/flush the remaining bytes of this
+          //        message in descriptor_tx so they cannot leak into the next transfer.
+          tx_pr_abort_o = pr_underrun_q;
           state_d = WaitRestart;
         end
       end
@@ -860,6 +881,34 @@ module i3c_target_fsm import i3c_pkg::*; (
       state_q <= state_d;
       ibi_retry_cnt_q <= ibi_retry_cnt_d;
       ibi_inhibit_q   <= ibi_inhibit_d;
+    end
+  end
+
+  // (OCA)
+  always_ff @(posedge clk_i or negedge rst_ni) begin : pr_underrun_guard
+    if (!rst_ni) begin
+      pr_last_q     <= 1'b0;
+      pr_underrun_q <= 1'b0;
+      pr_ur_wait_q  <= '0;
+    end else begin
+      // Capture "this was the last byte" at the pop (counter decrements on pop)
+      if ((state_q == TxPReadData) && bus_tx_rsp_i.done) begin
+        pr_last_q <= tx_last_byte_i;
+      end
+      // Timeout counter for waiting for refill of next byte
+      if (state_q == TxPReadTbitSel) begin
+        pr_ur_wait_q <= (&pr_ur_wait_q) ? pr_ur_wait_q : pr_ur_wait_q + 3'd1;
+      end else begin
+        pr_ur_wait_q <= '0;
+      end
+      // Latch a real underrun; cleared once the underrun-end completed (abort/flush
+      // pulsed in TxPReadTbitEnd) or the transfer is otherwise left
+      if ((state_q == TxPReadTbitSel) && !pr_last_q && !tx_fifo_rvalid_i &&
+          (&pr_ur_wait_q)) begin
+        pr_underrun_q <= 1'b1;
+      end else if ((state_q == TxPReadTbitEnd) && bus_tx_rsp_i.done) begin
+        pr_underrun_q <= 1'b0;
+      end
     end
   end
 
