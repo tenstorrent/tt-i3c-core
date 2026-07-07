@@ -1316,7 +1316,7 @@ package I3CCSR_uvm;
             this.CR_QUEUE_SIZE = new("CR_QUEUE_SIZE");
             this.CR_QUEUE_SIZE.configure(this, 8, 0, "RO", 0, 'h40, 1, 1, 0);
             this.IBI_STATUS_SIZE = new("IBI_STATUS_SIZE");
-            this.IBI_STATUS_SIZE.configure(this, 8, 8, "RO", 0, 'h40, 1, 1, 0);
+            this.IBI_STATUS_SIZE.configure(this, 8, 8, "RO", 0, 'h20, 1, 1, 0);
             this.RX_DATA_BUFFER_SIZE = new("RX_DATA_BUFFER_SIZE");
             this.RX_DATA_BUFFER_SIZE.configure(this, 8, 16, "RO", 0, 'h5, 1, 1, 0);
             this.TX_DATA_BUFFER_SIZE = new("TX_DATA_BUFFER_SIZE");
@@ -1357,9 +1357,9 @@ package I3CCSR_uvm;
 
         virtual function void build();
             this.ALT_RESP_QUEUE_SIZE = new("ALT_RESP_QUEUE_SIZE");
-            this.ALT_RESP_QUEUE_SIZE.configure(this, 8, 0, "RO", 0, 'h40, 1, 1, 0);
+            this.ALT_RESP_QUEUE_SIZE.configure(this, 8, 0, "RO", 0, 'h20, 1, 1, 0);
             this.ALT_RESP_QUEUE_EN = new("ALT_RESP_QUEUE_EN");
-            this.ALT_RESP_QUEUE_EN.configure(this, 1, 24, "RO", 0, 'h0, 1, 1, 0);
+            this.ALT_RESP_QUEUE_EN.configure(this, 1, 24, "RO", 0, 'h1, 1, 1, 0);
             this.EXT_IBI_QUEUE_EN = new("EXT_IBI_QUEUE_EN");
             this.EXT_IBI_QUEUE_EN.configure(this, 1, 28, "RO", 0, 'h0, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
@@ -5378,9 +5378,9 @@ package I3CCSR_uvm;
 
         virtual function void build();
             this.RX_DESC_BUFFER_SIZE = new("RX_DESC_BUFFER_SIZE");
-            this.RX_DESC_BUFFER_SIZE.configure(this, 8, 0, "RO", 0, 'h5, 1, 1, 0);
+            this.RX_DESC_BUFFER_SIZE.configure(this, 8, 0, "RO", 0, 'h4, 1, 1, 0);
             this.TX_DESC_BUFFER_SIZE = new("TX_DESC_BUFFER_SIZE");
-            this.TX_DESC_BUFFER_SIZE.configure(this, 8, 8, "RO", 0, 'h5, 1, 1, 0);
+            this.TX_DESC_BUFFER_SIZE.configure(this, 8, 8, "RO", 0, 'h4, 1, 1, 0);
             this.RX_DATA_BUFFER_SIZE = new("RX_DATA_BUFFER_SIZE");
             this.RX_DATA_BUFFER_SIZE.configure(this, 8, 16, "RO", 0, 'h5, 1, 1, 0);
             this.TX_DATA_BUFFER_SIZE = new("TX_DATA_BUFFER_SIZE");
@@ -5417,7 +5417,7 @@ package I3CCSR_uvm;
 
         virtual function void build();
             this.IBI_QUEUE_SIZE = new("IBI_QUEUE_SIZE");
-            this.IBI_QUEUE_SIZE.configure(this, 8, 0, "RO", 0, 'h5, 1, 1, 0);
+            this.IBI_QUEUE_SIZE.configure(this, 8, 0, "RO", 0, 'h4, 1, 1, 0);
             if (has_coverage(UVM_CVR_REG_BITS)) begin
                 foreach(IBI_QUEUE_SIZE_bit_cg[bt]) IBI_QUEUE_SIZE_bit_cg[bt] = new();
             end

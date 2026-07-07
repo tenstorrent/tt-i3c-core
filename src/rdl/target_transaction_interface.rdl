@@ -1321,14 +1321,14 @@ regfile TargetTransactionInterfaceRegisters #(
             desc = "TX Descriptor Buffer Size in DWORDs calculated as `2^(N+1)`";
             sw = r;
             hw = r;
-            reset = 8'h05; // FUTUREFIX: was `tx_desc_fifo_size`
+            reset = 8'h04; // FUTUREFIX: was `tx_desc_fifo_size`
         } TX_DESC_BUFFER_SIZE[15:8];
         field {
             name = "RX_DESC_BUFFER_SIZE";
             desc = "RX Descriptor Buffer Size in DWORDs calculated as `2^(N+1)`";
             sw = r;
             hw = r;
-            reset = 8'h05; // FUTUREFIX: was `rx_desc_fifo_size`
+            reset = 8'h04; // FUTUREFIX: was `rx_desc_fifo_size`
         } RX_DESC_BUFFER_SIZE[7:0];
     } QUEUE_SIZE;
     reg {
@@ -1339,7 +1339,7 @@ regfile TargetTransactionInterfaceRegisters #(
             desc = "IBI Queue Size in DWORDs calculated as `2^(N+1)`";
             sw = r;
             hw = r;
-            reset = 8'h05; // FUTUREFIX: was `ibi_fifo_size`
+            reset = 8'h04; // FUTUREFIX: was `ibi_fifo_size`
         } IBI_QUEUE_SIZE[7:0];
     } IBI_QUEUE_SIZE;
     reg {

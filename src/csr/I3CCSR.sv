@@ -11711,11 +11711,11 @@ module I3CCSR (
     assign hwif_out.I3C_EC.TTI.IBI_PORT.req_is_wr = decoded_req_is_wr;
     assign hwif_out.I3C_EC.TTI.IBI_PORT.wr_data = decoded_wr_data;
     assign hwif_out.I3C_EC.TTI.IBI_PORT.wr_biten = decoded_wr_biten;
-    assign hwif_out.I3C_EC.TTI.QUEUE_SIZE.RX_DESC_BUFFER_SIZE.value = 8'h5;
-    assign hwif_out.I3C_EC.TTI.QUEUE_SIZE.TX_DESC_BUFFER_SIZE.value = 8'h5;
+    assign hwif_out.I3C_EC.TTI.QUEUE_SIZE.RX_DESC_BUFFER_SIZE.value = 8'h4;
+    assign hwif_out.I3C_EC.TTI.QUEUE_SIZE.TX_DESC_BUFFER_SIZE.value = 8'h4;
     assign hwif_out.I3C_EC.TTI.QUEUE_SIZE.RX_DATA_BUFFER_SIZE.value = 8'h5;
     assign hwif_out.I3C_EC.TTI.QUEUE_SIZE.TX_DATA_BUFFER_SIZE.value = 8'h5;
-    assign hwif_out.I3C_EC.TTI.IBI_QUEUE_SIZE.IBI_QUEUE_SIZE.value = 8'h5;
+    assign hwif_out.I3C_EC.TTI.IBI_QUEUE_SIZE.IBI_QUEUE_SIZE.value = 8'h4;
     // Field: I3CCSR.I3C_EC.TTI.QUEUE_THLD_CTRL.TX_DESC_THLD
     always_comb begin
         automatic logic [7:0] next_c;
@@ -13216,12 +13216,12 @@ module I3CCSR (
     assign readback_array[24][26:24] = (decoded_reg_strb.PIOControl.DATA_BUFFER_THLD_CTRL && !decoded_req_is_wr) ? field_storage.PIOControl.DATA_BUFFER_THLD_CTRL.RX_START_THLD.value : '0;
     assign readback_array[24][31:27] = '0;
     assign readback_array[25][7:0] = (decoded_reg_strb.PIOControl.QUEUE_SIZE && !decoded_req_is_wr) ? 8'h40 : '0;
-    assign readback_array[25][15:8] = (decoded_reg_strb.PIOControl.QUEUE_SIZE && !decoded_req_is_wr) ? 8'h40 : '0;
+    assign readback_array[25][15:8] = (decoded_reg_strb.PIOControl.QUEUE_SIZE && !decoded_req_is_wr) ? 8'h20 : '0;
     assign readback_array[25][23:16] = (decoded_reg_strb.PIOControl.QUEUE_SIZE && !decoded_req_is_wr) ? 8'h5 : '0;
     assign readback_array[25][31:24] = (decoded_reg_strb.PIOControl.QUEUE_SIZE && !decoded_req_is_wr) ? 8'h5 : '0;
-    assign readback_array[26][7:0] = (decoded_reg_strb.PIOControl.ALT_QUEUE_SIZE && !decoded_req_is_wr) ? 8'h40 : '0;
+    assign readback_array[26][7:0] = (decoded_reg_strb.PIOControl.ALT_QUEUE_SIZE && !decoded_req_is_wr) ? 8'h20 : '0;
     assign readback_array[26][23:8] = '0;
-    assign readback_array[26][24:24] = (decoded_reg_strb.PIOControl.ALT_QUEUE_SIZE && !decoded_req_is_wr) ? 1'h0 : '0;
+    assign readback_array[26][24:24] = (decoded_reg_strb.PIOControl.ALT_QUEUE_SIZE && !decoded_req_is_wr) ? 1'h1 : '0;
     assign readback_array[26][27:25] = '0;
     assign readback_array[26][28:28] = (decoded_reg_strb.PIOControl.ALT_QUEUE_SIZE && !decoded_req_is_wr) ? 1'h0 : '0;
     assign readback_array[26][31:29] = '0;
@@ -13608,11 +13608,11 @@ module I3CCSR (
     assign readback_array[102][31:8] = '0;
     assign readback_array[103] = hwif_in.I3C_EC.TTI.RX_DESC_QUEUE_PORT.rd_ack ? hwif_in.I3C_EC.TTI.RX_DESC_QUEUE_PORT.rd_data : '0;
     assign readback_array[104] = hwif_in.I3C_EC.TTI.RX_DATA_PORT.rd_ack ? hwif_in.I3C_EC.TTI.RX_DATA_PORT.rd_data : '0;
-    assign readback_array[105][7:0] = (decoded_reg_strb.I3C_EC.TTI.QUEUE_SIZE && !decoded_req_is_wr) ? 8'h5 : '0;
-    assign readback_array[105][15:8] = (decoded_reg_strb.I3C_EC.TTI.QUEUE_SIZE && !decoded_req_is_wr) ? 8'h5 : '0;
+    assign readback_array[105][7:0] = (decoded_reg_strb.I3C_EC.TTI.QUEUE_SIZE && !decoded_req_is_wr) ? 8'h4 : '0;
+    assign readback_array[105][15:8] = (decoded_reg_strb.I3C_EC.TTI.QUEUE_SIZE && !decoded_req_is_wr) ? 8'h4 : '0;
     assign readback_array[105][23:16] = (decoded_reg_strb.I3C_EC.TTI.QUEUE_SIZE && !decoded_req_is_wr) ? 8'h5 : '0;
     assign readback_array[105][31:24] = (decoded_reg_strb.I3C_EC.TTI.QUEUE_SIZE && !decoded_req_is_wr) ? 8'h5 : '0;
-    assign readback_array[106][7:0] = (decoded_reg_strb.I3C_EC.TTI.IBI_QUEUE_SIZE && !decoded_req_is_wr) ? 8'h5 : '0;
+    assign readback_array[106][7:0] = (decoded_reg_strb.I3C_EC.TTI.IBI_QUEUE_SIZE && !decoded_req_is_wr) ? 8'h4 : '0;
     assign readback_array[106][31:8] = '0;
     assign readback_array[107][7:0] = (decoded_reg_strb.I3C_EC.TTI.QUEUE_THLD_CTRL && !decoded_req_is_wr) ? field_storage.I3C_EC.TTI.QUEUE_THLD_CTRL.TX_DESC_THLD.value : '0;
     assign readback_array[107][15:8] = (decoded_reg_strb.I3C_EC.TTI.QUEUE_THLD_CTRL && !decoded_req_is_wr) ? field_storage.I3C_EC.TTI.QUEUE_THLD_CTRL.RX_DESC_THLD.value : '0;

@@ -145,7 +145,7 @@ regfile PIORegs #(
             desc = "IBI Queue size is equal to N";
             sw = r;
             hw = na;
-            reset = 8'h40; // FUTUREFIX: was `ibi_fifo_size`
+            reset = 8'h20; // FUTUREFIX: was `ibi_fifo_size`
         } IBI_STATUS_SIZE[15:8];
         field {
             name = "CR_QUEUE_SIZE";
@@ -170,14 +170,14 @@ regfile PIORegs #(
                 ALT_RESP_QUEUE_SIZE contains response queue size";
             sw = r;
             hw = na;
-            reset = 1'b0; // FUTUREFIX: was `cmd_fifo_size != resp_fifo_size`
+            reset = 1'b1; // FUTUREFIX: was `cmd_fifo_size != resp_fifo_size`
         } ALT_RESP_QUEUE_EN[24:24];
         field {
             name = "ALT_RESP_QUEUE_SIZE";
             desc = "Valid only if ALT_RESP_QUEUE_EN is set. Contains response queue size";
             sw = r;
             hw = na;
-            reset = 8'h40; // FUTUREFIX: was `resp_fifo_size`
+            reset = 8'h20; // FUTUREFIX: was `resp_fifo_size`
         } ALT_RESP_QUEUE_SIZE[7:0];
     } ALT_QUEUE_SIZE @ 0x1C;
     reg {
