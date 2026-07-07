@@ -257,7 +257,7 @@ module flow_active
   logic [$clog2(HciTxDataWidth>>3)-1 : 0] byte_select;
   logic [$clog2(HciTxDataWidth>>3)-1 : 0] ccc_byte_select;
   assign byte_select = ((transfer_cnt_q - 1) % (HciTxDataWidth >> 3));
-  assign ccc_byte_select = ((transfer_cnt_q - 3) % (HciTxDataWidth >> 3)); // the first 2 CCC transfers are irrelevant for the byte_select signal (CCC and target addr)
+  assign ccc_byte_select = ((transfer_cnt_q - 4) % (HciTxDataWidth >> 3)); // payload starts at count 4 (7E, CCC, DefByte slot, target addr precede it)
   assign tx_dword_array = tx_dword;
   logic pop_tx_fifo;
 
@@ -275,10 +275,12 @@ module flow_active
   logic ccc_done;
   logic ccc_last_trans;
   logic ccc_has_payload;
+  logic ccc_has_def_byte;
   logic ccc_ce0_first_retry_d, ccc_ce0_first_retry_q;
   ccc_cmd_e cmd_ccc, prev_ccc_d, prev_ccc_q;
   assign cmd_ccc = ccc_cmd_e'(cmd_desc[14:7]);
   assign ccc_has_payload = has_payload(cmd_ccc);
+  assign ccc_has_def_byte = is_regular_transfer ? regular_direct_cmd_desc.dbp : imm_use_def_byte;
 
   // Dynamic Address Assignment signals
 
@@ -524,10 +526,14 @@ module flow_active
     if (transfer_cnt_clr) begin
       transfer_cnt_d = '0;
     end else if (transfer_cnt_en) begin
-      transfer_cnt_d = transfer_cnt_q + 1;
+      if ((state == DirectCCC) && (transfer_cnt_q == 32'd1) && ~ccc_has_def_byte) begin
+        transfer_cnt_d = 32'd3;  // no defining byte: skip the def-byte slot (count 2)
+      end else begin
+        transfer_cnt_d = transfer_cnt_q + 1;
+      end
 
     end else if ((transfer_cnt_q == '0) && cmd_is_ccc && ~cmd_is_broadcast_ccc && ((prev_ccc_q == cmd_ccc) && ~prev_cmd_toc_q)) begin
-      transfer_cnt_d = 2; // transfer_cnt_q = 0: 7'h7E byte, transfer_cnt_q = 1: CCC byte according to Figure 32 I3C Basic Spec we are allowed to skip these two bytes when the CCC stays the same.
+      transfer_cnt_d = 3; // repeated same CCC: skip 7'h7E + CCC (+ DefByte) per Figure 32, resume at target addr
     end else if(state == DynamicAddrAssignment && daa_iteration_done && (assigned_addr_cnt_q <= addr_cmd_desc.dev_count)) begin
       transfer_cnt_d = 2;  // transfer_cnt_q = 2: is the start of a DAA "frame", while we have not assigned all addresses we should try again
     end
@@ -1062,7 +1068,7 @@ module flow_active
         ccc_last_trans = 1'b0;
         fmt_flag_start_before_o = 1'b0;
         fmt_flag_stop_after_o = 1'b0;
-        resp_data_length_d = (transfer_cnt_q == 0) ? '0 : transfer_cnt_q - 1;
+        resp_data_length_d = (transfer_cnt_q < 2) ? '0 : transfer_cnt_q - 2; // read-back payload bytes only; def byte excluded
         ccc_done = 1'b0;
         fmt_bit_o = 1'b1;
         tx_queue_rready_o = 1'b0;
@@ -1079,22 +1085,44 @@ module flow_active
           32'd1: begin  // Broadcast the CCC
             fmt_byte_o = cmd_ccc;
             fmt_bit_o = ^{fmt_byte_o, 1'b1};
-            fmt_flag_restart_after_o = 1'b1;
+            fmt_flag_restart_after_o = ~ccc_has_def_byte; // defining byte follows the CCC with no restart
             tx_queue_rready_o = is_regular_transfer & fmt_fifo_rdone_i; // Pop payload byte for next cycle
           end
-          32'd2: begin  // Transmit Target Addr
-            fmt_byte_o = is_direct_transfer ? (is_regular_transfer ? {regular_direct_cmd_desc.dev_address, cmd_dir == Read} 
-                                             : {immediate_direct_cmd_desc.dev_address, cmd_dir == Read}) 
-                                             : ((cmd_ccc == CCC_DIRECT_SETDASA) ? {dat_rdata.static_address, cmd_dir == Read} : {dat_rdata.dynamic_address, cmd_dir == Read});
+          32'd2: begin  // Transmit Defining Byte (skipped via count jump when absent)
+            fmt_byte_o = is_regular_transfer ? regular_direct_cmd_desc.def_byte : immediate_direct_cmd_desc.def_or_data_byte1;
+            fmt_bit_o = ^{fmt_byte_o, 1'b1};
+            fmt_flag_restart_after_o = 1'b1; // Sr before target address
+          end
+          32'd3: begin  // Transmit Target Addr
+            fmt_byte_o = is_direct_transfer ? (is_regular_transfer ? {regular_direct_cmd_desc.dev_address, cmd_dir == Read}
+                                            : {immediate_direct_cmd_desc.dev_address, cmd_dir == Read})
+                                            : ((cmd_ccc == CCC_DIRECT_SETDASA) ? {dat_rdata.static_address, cmd_dir == Read} : {dat_rdata.dynamic_address, cmd_dir == Read});
             // SETDASA is the only CCC using the static address instead of the dynamic address
-            tx_queue_rready_o = is_regular_transfer & fmt_fifo_rdone_i & (prev_ccc_q == cmd_ccc); // Pop payload byte for next cycle if we skipped sending 7'h7E and CCC bytes
+            tx_queue_rready_o = is_regular_transfer & fmt_fifo_rdone_i & (prev_ccc_q == cmd_ccc); // Pop payload byte for next cycle if we skipped the header
             fmt_flag_read_bytes_o = fmt_fifo_rdone_i & (cmd_dir == Read);
             if (fmt_receive_nack_i) begin
               resp_err_status_d   = Nack;
               fmt_flag_hdr_exit_o = use_ce2_error_handling_on_nack_q;
             end
+            if (ccc_has_def_byte & (data_length == '0) & ~ccc_has_one_byte_of_payload(cmd_ccc)) begin
+              // defining-byte-only CCC (e.g. RSTACT): no payload, the address is the last transaction
+              ccc_last_trans = 1'b1;
+              ccc_done = transfer_cnt_en;
+              fmt_flag_stop_after_o = is_regular_transfer ? (is_direct_transfer ? regular_direct_cmd_desc.toc : regular_dat_cmd_desc.toc)
+                                                          : (is_direct_transfer ? immediate_direct_cmd_desc.toc : immediate_dat_cmd_desc.toc);
+              fmt_flag_restart_after_o = is_regular_transfer ? (is_direct_transfer ? ~regular_direct_cmd_desc.toc : ~regular_dat_cmd_desc.toc)
+                                                             : (is_direct_transfer ? ~immediate_direct_cmd_desc.toc : ~immediate_dat_cmd_desc.toc);
+              prev_cmd_toc_d = ~fmt_flag_restart_after_o;
+              if (fmt_fifo_rdone_i & fmt_flag_restart_after_o & ~cmd_queue_rvalid_i) begin
+                fmt_flag_stop_after_o = 1'b1;
+                fmt_flag_restart_after_o = 1'b0;
+                hc_seq_cancel_stat = 1'b1;
+                hc_err_cmd_seq_timeout_stat = 1'b1;
+              end
+              resp_err_status_d = Success;
+            end
           end
-          32'd3: begin  // Transmit the first Payload byte
+          32'd4: begin  // Transmit the first Payload byte
             ccc_last_trans = ccc_has_one_byte_of_payload(cmd_ccc);
             ccc_done =  ccc_last_trans & transfer_cnt_en; // CCC is done if it only needs one payload byte
             if (is_regular_transfer) begin
@@ -1136,12 +1164,14 @@ module flow_active
                 resp_err_status_d = (cmd_ccc == CCC_DIRECT_SETDASA) ? NotSupported : Success;  // SETDASA is only supported with address assignment cmd desc
               end
             end else begin
-              // (OCA) complete an immediate CCC at cnt=3 when its
-              // only payload byte is sent here — a whitelisted 1-byte CCC, or a defining-byte-only
-              // CCC (dtt=5 => defining byte + 0 data, e.g. RSTACT). Multi-byte CCCs continue at cnt>=4.
-              ccc_last_trans = ccc_has_one_byte_of_payload(cmd_ccc) | (transfer_cnt_q == (imm_use_def_byte ? (data_length + 3) : (data_length + 2)));
+              // (OCA) immediate CCC first payload byte: a whitelisted 1-byte CCC completes here;
+              // multi-byte CCCs continue at cnt>=5. def_or_data_byte1 is the first payload only when
+              // there is no defining byte (otherwise it was already sent at count 2).
+              ccc_last_trans = ccc_has_one_byte_of_payload(cmd_ccc) | (transfer_cnt_q == (data_length + 3));
               ccc_done = ccc_last_trans & transfer_cnt_en;
-              fmt_byte_o = (cmd_ccc == CCC_DIRECT_SETDASA) ? {dat_rdata.dynamic_address, 1'b0} : (is_direct_transfer ? immediate_direct_cmd_desc.def_or_data_byte1 : immediate_dat_cmd_desc.def_or_data_byte1);
+              fmt_byte_o = (cmd_ccc == CCC_DIRECT_SETDASA) ? {dat_rdata.dynamic_address, 1'b0}
+                         : (imm_use_def_byte ? (is_direct_transfer ? immediate_direct_cmd_desc.data_byte2 : immediate_dat_cmd_desc.data_byte2)
+                                             : (is_direct_transfer ? immediate_direct_cmd_desc.def_or_data_byte1 : immediate_dat_cmd_desc.def_or_data_byte1));
               fmt_bit_o = ^{fmt_byte_o, 1'b1};
               if (ccc_last_trans) begin
                 fmt_flag_stop_after_o = (cmd_ccc == CCC_DIRECT_SETDASA) ? addr_cmd_desc.toc : (is_direct_transfer ? immediate_direct_cmd_desc.toc : immediate_dat_cmd_desc.toc);
@@ -1157,9 +1187,9 @@ module flow_active
               end
             end
           end
-          [32'd4 : 32'd8]: begin
+          [32'd5 : 32'd9]: begin
             if (is_regular_transfer) begin
-              ccc_last_trans = is_direct_transfer ? (transfer_cnt_q == (regular_dat_cmd_desc.data_length + 2)) : (transfer_cnt_q == (regular_direct_cmd_desc.data_length + 2));
+              ccc_last_trans = is_direct_transfer ? (transfer_cnt_q == (regular_dat_cmd_desc.data_length + 3)) : (transfer_cnt_q == (regular_direct_cmd_desc.data_length + 3));
               ccc_done = ccc_last_trans & transfer_cnt_en;
               if (cmd_dir == Read) begin  // GET CCC
                 fmt_flag_read_bytes_o = 1'b1;
@@ -1168,7 +1198,7 @@ module flow_active
                 if (fmt_flag_read_valid_i) begin
                   rx_dword_array[ccc_byte_select] = fmt_byte_i;
                 end
-                if (((transfer_cnt_q - 2) % (HciRxDataWidth >> 3)) == 0) begin
+                if (((transfer_cnt_q - 3) % (HciRxDataWidth >> 3)) == 0) begin
                   rx_queue_wvalid_o = fmt_flag_read_valid_i;  // Send data to rx queue
                   if (~rx_queue_wready_i) begin
                     resp_err_status_d = Ovl;
@@ -1206,19 +1236,23 @@ module flow_active
               end
             end else begin
               // (OCA) immediate multi-byte directed SET CCC
-              // payload (e.g. SETMWL=2B, SETMRL=3B). cnt=3 already sent def_or_data_byte1; send the
-              // remaining data bytes here and complete with Success. Immediate GET CCCs (which
-              // should not use an immediate descriptor) remain NotSupported.
+              // payload (e.g. SETMWL=2B, SETMRL=3B). cnt=4 already sent the first payload byte; send the
+              // remaining data bytes here and complete with Success. The def-byte offset shifts the
+              // data_byteN selection (byte1 was consumed at count 2 when a defining byte is present).
+              // Immediate GET CCCs (which should not use an immediate descriptor) remain NotSupported.
               if (cmd_dir == Read) begin
                 ccc_done = 1'b1;
                 resp_err_status_d = NotSupported;
               end else begin
-                ccc_last_trans = (transfer_cnt_q == (imm_use_def_byte ? (data_length + 3) : (data_length + 2)));
+                ccc_last_trans = (transfer_cnt_q == (data_length + 3));
                 ccc_done = ccc_last_trans & transfer_cnt_en;
                 unique case (transfer_cnt_q)
-                  32'd4:   fmt_byte_o = is_direct_transfer ? immediate_direct_cmd_desc.data_byte2 : immediate_dat_cmd_desc.data_byte2;
-                  32'd5:   fmt_byte_o = is_direct_transfer ? immediate_direct_cmd_desc.data_byte3 : immediate_dat_cmd_desc.data_byte3;
-                  32'd6:   fmt_byte_o = is_direct_transfer ? immediate_direct_cmd_desc.data_byte4 : immediate_dat_cmd_desc.data_byte4;
+                  32'd5:   fmt_byte_o = imm_use_def_byte ? (is_direct_transfer ? immediate_direct_cmd_desc.data_byte3 : immediate_dat_cmd_desc.data_byte3)
+                                                         : (is_direct_transfer ? immediate_direct_cmd_desc.data_byte2 : immediate_dat_cmd_desc.data_byte2);
+                  32'd6:   fmt_byte_o = imm_use_def_byte ? (is_direct_transfer ? immediate_direct_cmd_desc.data_byte4 : immediate_dat_cmd_desc.data_byte4)
+                                                         : (is_direct_transfer ? immediate_direct_cmd_desc.data_byte3 : immediate_dat_cmd_desc.data_byte3);
+                  32'd7:   fmt_byte_o = imm_use_def_byte ? '0
+                                                         : (is_direct_transfer ? immediate_direct_cmd_desc.data_byte4 : immediate_dat_cmd_desc.data_byte4);
                   default: fmt_byte_o = '0;
                 endcase
                 fmt_bit_o = ^{fmt_byte_o, 1'b1};
