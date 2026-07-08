@@ -194,7 +194,8 @@ module i3c_controller_fsm
       bus_tx_idle,
       bus_tx_req_err,
       bus_error,
-      bus_tx_sel_od_pp;
+      bus_tx_sel_od_pp,
+      bus_tx_release;
 
   // RX signals
   logic [7:0] bus_rx_data, rx_byte_d, rx_byte_q;
@@ -290,6 +291,7 @@ module i3c_controller_fsm
     bus_tx_req_byte = 1'b0;
     bus_tx_req_bit = 1'b0;
     bus_tx_req_value = '0;
+    bus_tx_release = 1'b0;
     bus_rx_req_byte = 1'b0;
     bus_rx_req_bit = 1'b0;
     bus_rx_req_bit_d = bus_rx_req_bit_q;
@@ -438,6 +440,7 @@ module i3c_controller_fsm
         ctrl_scl_o = scl_flow_scl;
         if (rx_done_bit_q) begin
           bus_tx_req_bit = 1'b1;
+          bus_tx_release = 1'b1;  // release SDA after the ACK so the target drives the data phase
           ctrl_sda_o = tx_flow_sda;
           bus_tx_req_value = {7'b0, fmt_bit_i};
           if (bus_tx_done) begin
@@ -574,6 +577,15 @@ module i3c_controller_fsm
       .rx_idle_o(bus_rx_idle)
   );
 
+  // (OCA) actual value driven on SDA last cycle; fed back into the TX cell so it
+  // holds the true line value (incl. what START/STOP gen drove) while awaiting a
+  // negedge, instead of its own stale internal guess
+  logic ctrl_sda_last_q;
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (~rst_ni) ctrl_sda_last_q <= 1'b1;
+    else ctrl_sda_last_q <= ctrl_sda_o;
+  end
+
   // SDA driver
   logic unassigned_bus_sel_od_pp;
   // (OCA) drive bus TX OD/PP select from phy_sel_od_pp_o instead of the hardwired 1'b0
@@ -596,6 +608,8 @@ module i3c_controller_fsm
       .bus_error_o     (bus_error),
       .sel_od_pp_i     (bus_tx_sel_od_pp),
       .sel_od_pp_o     (unassigned_bus_sel_od_pp),
+      .sda_hold_i      (ctrl_sda_last_q),
+      .release_i       (bus_tx_release),
       .sda_o           (tx_flow_sda)
   );
 
