@@ -162,18 +162,26 @@ module i3c_controller_fsm
     end
   end
 
-  // (OCA) need to latch ack during ack period since switching to pp mode has it immediately 
-  // giving up control of the line, in which the ack can be mistaken as a nack if not latched
-  logic ack_sda_low_seen_q;
+  // (OCA) ACK = SDA went low and stayed low; NACK = never low or floated back up. Sample only while
+  // driving SCL low so the target's rising-edge SDA release isn't mistaken for a NACK; 
+  // flags hold through the high phase for received_nack to read at bus_rx_done.
+  logic ack_seen_low_q, ack_high_after_low_q;
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
-      ack_sda_low_seen_q <= 1'b0;
+      ack_seen_low_q <= 1'b0;
+      ack_high_after_low_q <= 1'b0;
     end else if ((state_q == Address) & tx_bit_q) begin
-      if (~phy_sel_od_pp_o & ~ctrl_sda_i) ack_sda_low_seen_q <= 1'b1;
+      if (~phy_sel_od_pp_o & ~ctrl_scl_o) begin
+        if (~ctrl_sda_i) ack_seen_low_q <= 1'b1;
+        if (ctrl_sda_i & ack_seen_low_q) ack_high_after_low_q <= 1'b1;
+      end
     end else begin
-      ack_sda_low_seen_q <= 1'b0;
+      ack_seen_low_q <= 1'b0;
+      ack_high_after_low_q <= 1'b0;
     end
   end
+  logic ack_is_nack;
+  assign ack_is_nack = ~ack_seen_low_q | ack_high_after_low_q;
 
   // Bus initialization
   logic bus_init_d, bus_init_q;
@@ -329,8 +337,8 @@ module i3c_controller_fsm
           //bus_tx_req_value = {7'b0, 1'b1};
           // Read bus to check for NACK
           bus_rx_req_bit = 1'b1;
-          // (OCA) only counts as a nack if it was never pulled down
-          received_nack_d = bus_rx_data[0] & bus_rx_done & ~ack_sda_low_seen_q;
+          // (OCA) NACK iff the accumulated sense over the ACK window says so (see ack_is_nack)
+          received_nack_d = bus_rx_done & ack_is_nack;
 
           if (bus_rx_done) begin
             tx_bit_d = 1'b0;
@@ -358,9 +366,9 @@ module i3c_controller_fsm
         bus_rx_req_byte = ~phy_sel_od_pp_o & ~bus_rx_req_bit;  // In OD mode read the addr just in case an IBI happens
         // (OCA) covers any transients when in the Address state and prev transactions was a push pull
         if (tx_bit_d & ~bus_rx_done) begin
-          if (phy_sel_od_pp_o)          ctrl_sda_o = 1'b0;  // PP: original guard
-          else if (ack_sda_low_seen_q)  ctrl_sda_o = 1'b0;  // OD: target ACK observed -> hold low thru posedge
-          else                          ctrl_sda_o = 1'b1;  // OD: release so target drives (NACK still detectable)
+          if (phy_sel_od_pp_o)                ctrl_sda_o = 1'b0;  // PP: original guard
+          else if (ctrl_scl_o & ~ack_is_nack) ctrl_sda_o = 1'b0;  // OD: ACK confirmed -> hold low thru the high phase so the target's release doesn't float SDA up (STOP glitch)
+          else                                ctrl_sda_o = 1'b1;  // OD: release so target drives / we can sense the ACK
         end
       end
       BusTX: begin
@@ -399,22 +407,24 @@ module i3c_controller_fsm
           bus_rx_req_byte = 1'b1;
           fmt_flag_read_valid_o = 1'b1;  // Signals that fmt_byte_o and fmt_bit_o are valid
           fmt_bit_o = bus_rx_data[0];
-          if (fmt_flag_stop_after_i) begin  // abort the read by driving TX bit low
+          // (OCA) end the read: flag it now (bus_rx_done is at the posedge, SCL high), but only pull
+          // SDA low once SCL is low -- pulling it low here would be a falling edge under SCL-high (Sr)
+          if (fmt_flag_stop_after_i) begin
             stop_next_d = 1'b1;
-            ctrl_sda_o  = 1'b0;
+            if (~ctrl_scl_o) ctrl_sda_o = 1'b0;
           end
         end else if (bus_rx_done & ~bus_rx_req_bit_q) begin
           fmt_byte_o = bus_rx_data;
-          if (stop_next_q) begin  // abort the read by driving TX bit low
+          if (stop_next_q) begin
             fmt_flag_read_valid_o = 1'b1;
-            ctrl_sda_o = 1'b0;
+            if (~ctrl_scl_o) ctrl_sda_o = 1'b0;
           end
           bus_rx_req_bit_d = 1'b1;
           bus_rx_req_byte = 1'b0;
           rx_byte_d = bus_rx_data;
         end
-        if (stop_next_q) begin  // abort the read by driving TX bit low
-          ctrl_sda_o  = 1'b0;
+        if (stop_next_q) begin  // pull SDA low for the stop, but only while SCL is low
+          if (~ctrl_scl_o) ctrl_sda_o = 1'b0;
           stop_next_d = scl_negedge ? 1'b0 : stop_next_q;
           t_bit_done  = scl_negedge;
         end
@@ -463,7 +473,9 @@ module i3c_controller_fsm
       Stop: begin
         received_nack_d = 1'b0;
         ctrl_scl_o = scl_flow_scl;
-        ctrl_sda_o = 1'b0;
+        // Only pull SDA low while SCL is low; if entered under SCL-high (e.g. from the BusRX T-bit
+        // posedge) leave SDA released so it doesn't fall under SCL-high and look like a START.
+        if (~ctrl_scl_o) ctrl_sda_o = 1'b0;
         if (scl_negedge | scl_stable_low | start_stop_active) begin  // wait for cycle to finish and then stop
           stop_after_d = 1'b1;
           ctrl_sda_o = start_stop_sda;
@@ -548,9 +560,8 @@ module i3c_controller_fsm
   // SDA Arbitration detection logic
   always_comb begin
     fmt_sda_arbitration_o = 1'b0;
-    // Check during arbitrable address phase (not during ACK) and in Idle
-    // state
-    if (((state_q == Address) || ((state_q == Idle) && bus_available)) && (phy_sel_od_pp_o == 1'b0) && (bus_rx_req_bit == 1'b0)) begin
+    // Check during arbitrable address phase (not during ACK) and in Idle state
+    if (((state_q == Address) || (state_q == Idle)) && (phy_sel_od_pp_o == 1'b0) && (bus_rx_req_bit == 1'b0)) begin
       if (ctrl_bus_i.scl.stable_high & scl_stable_high) begin
         // (OCA) only count as arbitration lost when external agent pulled SDA line while SCL high
         // -> cannot use XOR as it would misdetect current controller puling sda low
