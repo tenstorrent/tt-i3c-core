@@ -123,18 +123,6 @@ module ctrl_bus_tx (
   // State outputs
   assign tx_idle_o = (state_q == Idle);
 
-  // (OCA) handoff release: once the bit has been sampled (SCL posedge while
-  // transmitting), release SDA for the rest of the high phase and the hold so
-  // the controller is off the line by the negedge. Safe to release during SCL
-  // high here because the target holds SDA low through the IBI, so the line
-  // stays low (no false Sr/P) until the target drives the data phase.
-  logic sda_released_q;
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (~rst_ni) sda_released_q <= 1'b0;
-    else if (state_q == Idle) sda_released_q <= 1'b0;
-    else if (release_i & (state_q == TransmitData) & scl_posedge_i) sda_released_q <= 1'b1;
-  end
-
   always_comb begin : tx_fsm_outputs
     sda_o = sda_hold_i;  // default: hold the actual bus value while waiting
     tx_done_o = '0;  // Assign to 1 only after transmitting a bit
@@ -167,13 +155,15 @@ module ctrl_bus_tx (
         sda_o = drive_value_i;
       end
       TransmitData: begin
-        // Release after the posedge (bit already sampled); target holds low.
-        sda_o = sda_released_q ? 1'b1 : drive_value_i;
+        sda_o = drive_value_i;  // drive the bit through the whole SCL-high phase
         if (scl_negedge_i) begin
           tcount_sel  = tHoldData;
           load_tcount = '1;
-          // Handoff bit needs no hold time (line already released) -> finish now.
-          if (t_hd_z | sda_released_q) tx_done_o = '1;
+          // (OCA) IBI handoff: release SDA right at the negedge (SCL low), not during the high phase
+          // -- the ACK stays driven through SCL-high (no float/false-STOP), and the controller is off
+          // the line as SCL falls so the target can drive the data phase. No data-hold time needed.
+          if (release_i) sda_o = 1'b1;
+          if (t_hd_z | release_i) tx_done_o = '1;
         end
       end
       HoldData: begin
@@ -207,7 +197,7 @@ module ctrl_bus_tx (
         if (tcount_q == 20'd1) state_d = TransmitData;
       end
       TransmitData: begin
-        if (scl_negedge_i) state_d = (t_hd_z | sda_released_q) ? Idle : HoldData;
+        if (scl_negedge_i) state_d = (t_hd_z | release_i) ? Idle : HoldData;
       end
       HoldData: begin
         if (tcount_q == 20'd0 & scl_stable_low_i) state_d = Idle;

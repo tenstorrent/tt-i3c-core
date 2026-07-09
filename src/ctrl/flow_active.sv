@@ -71,6 +71,9 @@ module flow_active
     input logic [HciIbiThldWidth-1:0] ibi_queue_ready_thld_i,
     input logic ibi_queue_ready_thld_trig_i,
     input logic ibi_queue_empty_i,
+    // (OCA) how many payload dwords the IBI queue can take right now = min(IBIBufferDepthDwords,
+    // free_queue_dwords - 1_descriptor). 0 => not even one data dword fits, so NACK the IBI up front.
+    input logic [$clog2(`IBI_BUFFER_DEPTH+1)-1:0] ibi_max_data_dwords_i,
     output logic ibi_queue_wvalid_o,
     input logic ibi_queue_wready_i,
     output logic [HciIbiDataWidth-1:0] ibi_queue_wdata_o,
@@ -1542,7 +1545,7 @@ module flow_active
         fmt_flag_stop_after_o = 1'b0;
         fmt_flag_restart_after_o = 1'b0;
         ibi_data_d = ibi_data_q;
-        ibi_abort = dat_rdata.ibi_reject | ~dat_rdata.ibi_payload;
+        ibi_abort = dat_rdata.ibi_reject | ~dat_rdata.ibi_payload | (ibi_max_data_dwords_i == '0);
         rlt_req = 1'b0;
         if (~ibi_wb_q) begin
           if (transfer_cnt_q == '0) begin
@@ -1571,12 +1574,13 @@ module flow_active
             dat_read_valid_hw_o = rlt_valid;
             transfer_cnt_en = fmt_fifo_rdone_i;
           end else begin
-            if (transfer_cnt_q == (IBIBufferDepthDwords << 2)) begin
+            // (OCA) bound the IBI by what actually fits in the IBI queue right now
+            if (transfer_cnt_q == (ibi_max_data_dwords_i << 2)) begin
               fmt_flag_stop_after_o = 1'b1;
-              ibi_status_d.error = 1'b1; // NOTE: if the target sends the max amount of bytes the controller will still abort it and report an error (even though it's technically not an error)
+              ibi_status_d.error = 1'b1; // NOTE: target hit the current capacity; still reported as error
             end
             if (fmt_flag_read_valid_i) begin
-              if (((transfer_cnt_q - 1) >> 2) < IBIBufferDepthDwords) begin
+              if (((transfer_cnt_q - 1) >> 2) < ibi_max_data_dwords_i) begin
                 ibi_status_d.data_length = ibi_status_q.data_length + 1;
                 ibi_wb_d = ~fmt_bit_i;
                 fmt_flag_stop_after_o = ~fmt_bit_i;

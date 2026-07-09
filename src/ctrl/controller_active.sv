@@ -187,6 +187,16 @@ module controller_active
   assign fmt_fifo_rready_i2c_and_i3c = (fmt_fifo_rready & ~is_i2c_transfer) | ((fmt_fifo_rready_i2c | i2c_host_idle) & is_i2c_transfer);
   assign fmt_fifo_rdone_i2c_and_i3c = (fmt_fifo_rdone & ~is_i2c_transfer) | ((fmt_fifo_rready_i2c) & is_i2c_transfer);
 
+  // (OCA) Calculate data that the IBI queue can store
+  localparam int unsigned IbiMaxDwordsW = $clog2(`IBI_BUFFER_DEPTH + 1);
+  logic [HciIbiFifoDepthWidth-1:0] ibi_queue_free;
+  logic [HciIbiFifoDepthWidth-1:0] ibi_queue_free_data;
+  logic [IbiMaxDwordsW-1:0]        ibi_max_data_dwords;
+  assign ibi_queue_free      = HciIbiFifoDepth - ibi_queue_depth_i;
+  assign ibi_max_data_dwords = (ibi_queue_free > `IBI_BUFFER_DEPTH)
+                             ? IbiMaxDwordsW'(`IBI_BUFFER_DEPTH)
+                             : IbiMaxDwordsW'(ibi_queue_free);
+
   flow_active flow_fsm (
       .clk_i,
       .rst_ni,
@@ -228,6 +238,7 @@ module controller_active
       .ibi_queue_ready_thld_i,
       .ibi_queue_ready_thld_trig_i,
       .ibi_queue_empty_i,
+      .ibi_max_data_dwords_i       (ibi_max_data_dwords),
       .ibi_queue_wvalid_o,
       .ibi_queue_wready_i,
       .ibi_queue_wdata_o,

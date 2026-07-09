@@ -14,7 +14,7 @@
   `define TTI_TX_FIFO_DEPTH      64
   `define RESP_FIFO_DEPTH        32
   `define IBI_FIFO_DEPTH         32
-  `define IBI_BUFFER_DEPTH       8
+  `define IBI_BUFFER_DEPTH       32
   `define DAT_DEPTH              16
   `define DCT_DEPTH              16
   `define I3C_USE_AXI            1

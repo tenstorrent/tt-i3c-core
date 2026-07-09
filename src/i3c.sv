@@ -611,6 +611,38 @@ module i3c
 `endif
 
   controller #(
+`ifdef CONTROLLER_SUPPORT
+      .HciRespFifoDepth(HciRespFifoDepth),
+      .HciCmdFifoDepth(HciCmdFifoDepth),
+      .HciRxFifoDepth(HciRxFifoDepth),
+      .HciTxFifoDepth(HciTxFifoDepth),
+      .HciIbiFifoDepth(HciIbiFifoDepth),
+      .HciRespDataWidth(HciRespDataWidth),
+      .HciCmdDataWidth(HciCmdDataWidth),
+      .HciRxDataWidth(HciRxDataWidth),
+      .HciTxDataWidth(HciTxDataWidth),
+      .HciRespThldWidth(HciRespThldWidth),
+      .HciCmdThldWidth(HciCmdThldWidth),
+      .HciRxThldWidth(HciRxThldWidth),
+      .HciTxThldWidth(HciTxThldWidth),
+`endif
+`ifdef TARGET_SUPPORT
+      .TtiRxDescFifoDepth(TtiRxDescFifoDepth),
+      .TtiTxDescFifoDepth(TtiTxDescFifoDepth),
+      .TtiRxFifoDepth(TtiRxFifoDepth),
+      .TtiTxFifoDepth(TtiTxFifoDepth),
+      .TtiIbiFifoDepth(TtiIbiFifoDepth),
+      .TtiRxDescDataWidth(TtiRxDescDataWidth),
+      .TtiTxDescDataWidth(TtiTxDescDataWidth),
+      .TtiRxDataWidth(TtiRxDataWidth),
+      .TtiTxDataWidth(TtiTxDataWidth),
+      .TtiIbiDataWidth(TtiIbiDataWidth),
+      .TtiRxDescThldWidth(TtiRxDescThldWidth),
+      .TtiTxDescThldWidth(TtiTxDescThldWidth),
+      .TtiRxThldWidth(TtiRxThldWidth),
+      .TtiTxThldWidth(TtiTxThldWidth),
+      .TtiIbiThldWidth(TtiIbiThldWidth),
+`endif
       .DatAw(DatAw),
       .DctAw(DctAw)
   ) xcontroller (

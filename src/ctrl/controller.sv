@@ -519,7 +519,21 @@ module controller
 
 `ifdef CONTROLLER_SUPPORT
   // Active controller
-  controller_active xcontroller_active (
+  controller_active #(
+      .HciRespFifoDepth(HciRespFifoDepth),
+      .HciCmdFifoDepth(HciCmdFifoDepth),
+      .HciRxFifoDepth(HciRxFifoDepth),
+      .HciTxFifoDepth(HciTxFifoDepth),
+      .HciIbiFifoDepth(HciIbiFifoDepth),
+      .HciRespDataWidth(HciRespDataWidth),
+      .HciCmdDataWidth(HciCmdDataWidth),
+      .HciRxDataWidth(HciRxDataWidth),
+      .HciTxDataWidth(HciTxDataWidth),
+      .HciRespThldWidth(HciRespThldWidth),
+      .HciCmdThldWidth(HciCmdThldWidth),
+      .HciRxThldWidth(HciRxThldWidth),
+      .HciTxThldWidth(HciTxThldWidth)
+  ) xcontroller_active (
       .clk_i                       (clk_i),
       .rst_ni                      (rst_ni),
       .ctrl_bus_i                  (ctrl_bus_i[0:1]),
@@ -634,7 +648,23 @@ module controller
 `endif  // CONTROLLER_SUPPORT
 `ifdef TARGET_SUPPORT
   // Standby (Secondary) Controller
-  controller_standby xcontroller_standby (
+  controller_standby #(
+      .TtiRxDescFifoDepth(TtiRxDescFifoDepth),
+      .TtiTxDescFifoDepth(TtiTxDescFifoDepth),
+      .TtiRxFifoDepth(TtiRxFifoDepth),
+      .TtiTxFifoDepth(TtiTxFifoDepth),
+      .TtiIbiFifoDepth(TtiIbiFifoDepth),
+      .TtiRxDescDataWidth(TtiRxDescDataWidth),
+      .TtiTxDescDataWidth(TtiTxDescDataWidth),
+      .TtiRxDataWidth(TtiRxDataWidth),
+      .TtiTxDataWidth(TtiTxDataWidth),
+      .TtiIbiDataWidth(TtiIbiDataWidth),
+      .TtiRxDescThldWidth(TtiRxDescThldWidth),
+      .TtiTxDescThldWidth(TtiTxDescThldWidth),
+      .TtiRxThldWidth(TtiRxThldWidth),
+      .TtiTxThldWidth(TtiTxThldWidth),
+      .TtiIbiThldWidth(TtiIbiThldWidth)
+  ) xcontroller_standby (
       .clk_i,
       .rst_ni,
       .ctrl_bus_i                     (ctrl_bus_i[2:3]),
