@@ -577,7 +577,10 @@ module i3c_controller_fsm
       .clk_i,
       .rst_ni,
 
-      .scl_posedge_i(ctrl_bus_i.scl.pos_edge),
+      // (OCA) strobe capture on the DRIVEN SCL posedge, not the synced ctrl_bus_i.scl.pos_edge
+      // Same issue as on the tx side for ACK, the target can release control over SDA on posedge
+      // so sampling after posedge detection would sample the wrong value of SDA
+      .scl_posedge_i(scl_posedge),
       .scl_stable_high_i(ctrl_bus_i.scl.stable_high),
       .sda_i(ctrl_sda_i),
 
