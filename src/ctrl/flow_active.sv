@@ -718,7 +718,9 @@ module flow_active
         fmt_fifo_rvalid_o = 1'b1;
         fmt_flag_start_before_o = 1'b0;
         fmt_flag_stop_after_o = 1'b0;
-        resp_data_length_d = transfer_cnt_q;
+        // (OCA) writes report REMAINING data length per HCI: 0 when fully sent, the un-sent count on
+        // an early abort, and 0 on an address NACK (transfer_cnt_q==0 -> nothing transferred).
+        resp_data_length_d = (transfer_cnt_q == 0) ? '0 : 16'(data_length - transfer_cnt_q);
         unique case (transfer_cnt_q)
           // TODO: #95752 Add support for broadcast address control before private transfers. This can
           // be realized via HC_CONTROL.I2C_DEV_PRESENT and HC_CONTROL.IBA_INCLUDE register fields.
@@ -794,7 +796,9 @@ module flow_active
         fmt_fifo_rvalid_o = 1'b1;
         fmt_flag_start_before_o = 1'b0;
         fmt_flag_stop_after_o = 1'b0;
-        resp_data_length_d = transfer_cnt_q;
+        // (OCA) writes report REMAINING data length per HCI: 0 when fully sent, the un-sent count on
+        // an early abort, and 0 on an address NACK (transfer_cnt_q==0 -> nothing transferred).
+        resp_data_length_d = (transfer_cnt_q == 0) ? '0 : 16'(data_length - transfer_cnt_q);
         fmt_bit_o = 1'b1;
         unique case (transfer_cnt_q)
           // TODO: #95752 Add support for broadcast address control before private transfers. This can
@@ -873,7 +877,9 @@ module flow_active
         fmt_fifo_rvalid_o = 1'b1;
         fmt_flag_start_before_o = 1'b0;
         fmt_flag_stop_after_o = 1'b0;
-        resp_data_length_d = transfer_cnt_q;
+        // (OCA) writes report REMAINING data length per HCI: 0 when fully sent, the un-sent count on
+        // an early abort, and 0 on an address NACK (transfer_cnt_q==0 -> nothing transferred).
+        resp_data_length_d = (transfer_cnt_q == 0) ? '0 : 16'(data_length - transfer_cnt_q);
         fmt_bit_o = 1'b1;
         tx_queue_rready_o = ((transfer_cnt_q % (HciTxDataWidth >> 3)) == 0) & transfer_cnt_en;
 
@@ -920,7 +926,9 @@ module flow_active
         fmt_fifo_rvalid_o = 1'b1;
         fmt_flag_start_before_o = 1'b0;
         fmt_flag_stop_after_o = 1'b0;
-        resp_data_length_d = transfer_cnt_q;
+        // (OCA) writes report REMAINING data length per HCI: 0 when fully sent, the un-sent count on
+        // an early abort, and 0 on an address NACK (transfer_cnt_q==0 -> nothing transferred).
+        resp_data_length_d = (transfer_cnt_q == 0) ? '0 : 16'(data_length - transfer_cnt_q);
         fmt_bit_o = 1'b1;
         tx_queue_rready_o = ((transfer_cnt_q % (HciTxDataWidth >> 3)) == 0) & transfer_cnt_en;
 
