@@ -9,7 +9,7 @@ tt-axi-controller:
   RespFifoDepth: 32
   IbiFifoDepth: 32
   IbiFifoExtSize: False
-  IbiBufferDepth: 8
+  IbiBufferDepth: 32
   DatDepth: 16
   DctDepth: 16
   FrontendBusInterface: "AXI"
