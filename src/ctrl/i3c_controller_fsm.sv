@@ -409,6 +409,12 @@ module i3c_controller_fsm
         ctrl_scl_o = scl_flow_scl;
         bus_rx_req_byte = fmt_flag_read_bytes_i & ~bus_rx_req_bit_q;
         bus_rx_req_bit = bus_rx_req_bit_q;
+        // (OCA) Read end-of-data / abort handshake per MIPI I3C Basic v1.1.1 Section 5.1.2.3.4. 
+        // While sampling the T-bit, if the Target is driving it Low to signal end of data, the Controller holds SDA Low through
+        // the T-bit's SCL-high phase so the Target sees a clean, controller-confirmed read termination and re-arms its receive path.
+        if (bus_rx_req_bit_q & ctrl_scl_o & ~ctrl_sda_i) begin
+          ctrl_sda_o = 1'b0;
+        end
         if (bus_rx_done & bus_rx_req_bit_q) begin
           bus_rx_req_bit_d = 1'b0;
           bus_rx_req_byte = 1'b1;
@@ -480,9 +486,12 @@ module i3c_controller_fsm
       Stop: begin
         received_nack_d = 1'b0;
         ctrl_scl_o = scl_flow_scl;
-        // Only pull SDA low while SCL is low; if entered under SCL-high (e.g. from the BusRX T-bit
+        // (OCA) Only pull SDA low while SCL is low; if entered under SCL-high (e.g. from the BusRX T-bit
         // posedge) leave SDA released so it doesn't fall under SCL-high and look like a START.
-        if (~ctrl_scl_o) ctrl_sda_o = 1'b0;
+        // (OCA) if SDA is ALREADY Low under SCL-high (we entered from the BusRX read-abort
+        // hold, which drove the end-of-data T-bit Low, see BusRX Section-5.1.2.3.4 handshake), keep
+        // holding it Low instead of releasing, otherwise it will be seen as a premature STOP 
+        if (~ctrl_scl_o | ~ctrl_sda_i) ctrl_sda_o = 1'b0;
         if (scl_negedge | scl_stable_low | start_stop_active) begin  // wait for cycle to finish and then stop
           stop_after_d = 1'b1;
           ctrl_sda_o = start_stop_sda;
