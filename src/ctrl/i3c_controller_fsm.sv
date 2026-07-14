@@ -209,9 +209,14 @@ module i3c_controller_fsm
   logic [7:0] bus_rx_data, rx_byte_d, rx_byte_q;
   logic bus_rx_req_bit_d, bus_rx_req_bit_q, bus_rx_req_byte, bus_rx_done, bus_rx_idle, t_bit_done;
 
+  // (OCA) Mark the Address state that was entered from BusReadContinuous, i.e. the ENTDAA Dynamic-Address-assignment (DA-send) phase
+  // Per Section 5.1.10.1 the Target is locked in the DAA procedure and cannot issue an IBI, so use this flag to suppress IBI detection
+  logic daa_addr_phase_d, daa_addr_phase_q;
+
   // State Transition
   always_comb begin
     state_d = state_q;
+    daa_addr_phase_d = daa_addr_phase_q;
     unique case (state_q)
       Idle: begin
         if (fmt_fifo_rvalid_i & fmt_flag_start_before_i & ~is_i2c_transfer_i & bus_available) begin
@@ -230,6 +235,7 @@ module i3c_controller_fsm
           end else begin
             state_d = fmt_flag_stop_after_i ? Stop : (fmt_flag_restart_after_i ? ReStart : (fmt_flag_read_continuous_i ? BusReadContinuous : (fmt_flag_read_bytes_i ? BusRX : BusTX)));
           end
+          daa_addr_phase_d = 1'b0;  // leaving address state, clear DAA indicator
         end
       end
       BusTX: begin
@@ -247,6 +253,7 @@ module i3c_controller_fsm
           state_d = fmt_flag_stop_after_i ? Stop : (fmt_flag_restart_after_i ? ReStart : BusReadContinuous);
         end else if ((bus_rx_done || bus_rx_idle) & ~fmt_flag_read_continuous_i) begin  // this happens during DAA where we should go into address state
           state_d = Address;
+          daa_addr_phase_d = 1'b1;  // ENTDAA DA-send: SDA-low is DAA arbitration/ACK, not an IBI in Address state
         end
       end
       ReStart: begin
@@ -530,6 +537,7 @@ module i3c_controller_fsm
       stop_after_q <= 1'b0;
       repeated_start_q <= 1'b0;
       stop_next_q <= 1'b0;
+      daa_addr_phase_q <= 1'b0;
     end else begin
       state_q <= state_d;
       tx_bit_q <= tx_bit_d;
@@ -541,6 +549,7 @@ module i3c_controller_fsm
       stop_after_q <= stop_after_d;
       repeated_start_q <= repeated_start_d;
       stop_next_q <= stop_next_d;
+      daa_addr_phase_q <= daa_addr_phase_d;
     end
   end
 
@@ -561,7 +570,7 @@ module i3c_controller_fsm
   always_comb begin
     fmt_sda_arbitration_o = 1'b0;
     // Check during arbitrable address phase (not during ACK) and in Idle state
-    if (((state_q == Address) || (state_q == Idle)) && (phy_sel_od_pp_o == 1'b0) && (bus_rx_req_bit == 1'b0)) begin
+    if ((((state_q == Address) && ~daa_addr_phase_q) || (state_q == Idle)) && (phy_sel_od_pp_o == 1'b0) && (bus_rx_req_bit == 1'b0)) begin
       if (ctrl_bus_i.scl.stable_high & scl_stable_high) begin
         // (OCA) only count as arbitration lost when external agent pulled SDA line while SCL high
         // -> cannot use XOR as it would misdetect current controller puling sda low
