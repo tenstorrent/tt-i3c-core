@@ -366,6 +366,7 @@ module i3c_controller_fsm
         if (wait_for_scl_negedge_q) begin
           ctrl_sda_o = 1'b0;  // Handoff as per Section 5.1.2.3.1
           if (scl_negedge) begin
+            ctrl_sda_o = 1'b1;
             fmt_fifo_rdone_o = 1'b1;
             wait_for_scl_negedge_d = 1'b0;
           end
