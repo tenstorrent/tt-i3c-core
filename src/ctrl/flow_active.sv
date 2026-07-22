@@ -733,14 +733,14 @@ module flow_active
           // Byte 1
           32'd1: begin
             fmt_byte_o = is_direct_transfer ? (imm_use_def_byte ? immediate_direct_cmd_desc.data_byte2
-                                               : immediate_direct_cmd_desc.def_or_data_byte1) : 
+                                               : immediate_direct_cmd_desc.def_or_data_byte1) :
                                               (imm_use_def_byte ? immediate_dat_cmd_desc.data_byte2
                                                : immediate_dat_cmd_desc.def_or_data_byte1);
           end
           // Byte 2
           32'd2: begin
             fmt_byte_o = is_direct_transfer ? (imm_use_def_byte ? immediate_direct_cmd_desc.data_byte3
-                                               : immediate_direct_cmd_desc.data_byte2) : 
+                                               : immediate_direct_cmd_desc.data_byte2) :
                                               (imm_use_def_byte ? immediate_dat_cmd_desc.data_byte3
                                                : immediate_dat_cmd_desc.data_byte2);
           end
@@ -812,7 +812,7 @@ module flow_active
           // Byte 1
           32'd1: begin
             fmt_byte_o = is_direct_transfer ? (imm_use_def_byte ? immediate_direct_cmd_desc.data_byte2
-                                               : immediate_direct_cmd_desc.def_or_data_byte1) : 
+                                               : immediate_direct_cmd_desc.def_or_data_byte1) :
                                               (imm_use_def_byte ? immediate_dat_cmd_desc.data_byte2
                                                : immediate_dat_cmd_desc.def_or_data_byte1);
             fmt_bit_o = ^{fmt_byte_o, 1'b1};
@@ -820,7 +820,7 @@ module flow_active
           // Byte 2
           32'd2: begin
             fmt_byte_o = is_direct_transfer ? (imm_use_def_byte ? immediate_direct_cmd_desc.data_byte3
-                                               : immediate_direct_cmd_desc.data_byte2) : 
+                                               : immediate_direct_cmd_desc.data_byte2) :
                                               (imm_use_def_byte ? immediate_dat_cmd_desc.data_byte3
                                                : immediate_dat_cmd_desc.data_byte2);
             fmt_bit_o = ^{fmt_byte_o, 1'b1};
@@ -1427,7 +1427,7 @@ module flow_active
             end else if (fmt_fifo_rdone_i && (assigned_addr_cnt_q >= addr_cmd_desc.dev_count)) begin // there are more devices still on the bus
               ccc_done = 1'b1;
               // (OCA) issue the STOP when DAA terminates because all
-              // dev_count requested addresses have been assigned (NOT only on the NACK branch above). 
+              // dev_count requested addresses have been assigned (NOT only on the NACK branch above).
               fmt_flag_stop_after_o = 1'b1;
               resp_err_status_d = Success;
               resp_data_length_d = 16'd1; // according to I3C HCI Spec this indicates that at least 1 device has not yet been assigned a dynamic address
@@ -1472,9 +1472,11 @@ module flow_active
                 dct_write_valid_hw_o = 1'b1;
                 dct_index_d = dct_index_q + 1; // note the new index is used after we write the dct entry
 
-                // Fetch next DAT entry
-                dat_read_valid_hw_o = 1'b1;
-                dat_index_hw_o = dat_index_q + 1;
+                // (OCA) Only go to DAT table if the assign address count is less than what is requested, otherwise can overflow
+                if (assigned_addr_cnt_d < addr_cmd_desc.dev_count) begin
+                  dat_read_valid_hw_o = 1'b1;
+                  dat_index_hw_o = dat_index_q + 1;
+                end
 
               end
             end
@@ -1724,8 +1726,8 @@ module flow_active
                            (fmt_fifo_rready_i ? ((broadcast_addr_enable_q & prev_cmd_toc_q) ? I3CBcastHeader : I3CWriteImmediate) : state);
             end
             RegularTransferDirect: begin
-              // (OCA) a CCC must never fall through to the private I3CRead/I3CWriteRegular path. 
-              // When fmt FIFO is momentarily not ready, stall in FetchAddr 
+              // (OCA) a CCC must never fall through to the private I3CRead/I3CWriteRegular path.
+              // When fmt FIFO is momentarily not ready, stall in FetchAddr
               // (OCA) regular transfers additionally stall here until
               // tx/rx_xfer_startable (see their definition above).
               state_next = cmd_is_ccc ? (fmt_fifo_rready_i ? (cmd_is_broadcast_ccc ? BroadcastCCC : DirectCCC) : state) :
@@ -1838,7 +1840,7 @@ module flow_active
       end
       DirectCCC: begin
         if (ccc_done) begin
-          state_next = (~is_regular_transfer & immediate_direct_cmd_desc.wroc) ? WriteResp : 
+          state_next = (~is_regular_transfer & immediate_direct_cmd_desc.wroc) ? WriteResp :
                        (is_regular_transfer & regular_direct_cmd_desc.wroc)    ? WriteResp : Idle;
         end else if (fmt_receive_nack_i & fmt_fifo_rdone_i) begin
           state_next = WriteResp;
@@ -1849,7 +1851,7 @@ module flow_active
       end
       BroadcastCCC: begin
         if (ccc_done) begin
-          state_next = (~is_regular_transfer & immediate_direct_cmd_desc.wroc) ? WriteResp : 
+          state_next = (~is_regular_transfer & immediate_direct_cmd_desc.wroc) ? WriteResp :
                        (is_regular_transfer & regular_direct_cmd_desc.wroc)    ? WriteResp : Idle;
         end else if (fmt_receive_nack_i & fmt_fifo_rdone_i) begin
           state_next = WriteResp;
