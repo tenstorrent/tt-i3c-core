@@ -634,8 +634,9 @@ module i3c
       .TtiIbiFifoDepth(TtiIbiFifoDepth),
       .TtiRxDescDataWidth(TtiRxDescDataWidth),
       .TtiTxDescDataWidth(TtiTxDescDataWidth),
-      .TtiRxDataWidth(TtiRxDataWidth),
-      .TtiTxDataWidth(TtiTxDataWidth),
+      // TTI data is a byte stream here; recovery handler packs/unpacks the 32b FIFO words
+      .TtiRxDataWidth(8),
+      .TtiTxDataWidth(8),
       .TtiIbiDataWidth(TtiIbiDataWidth),
       .TtiRxDescThldWidth(TtiRxDescThldWidth),
       .TtiTxDescThldWidth(TtiTxDescThldWidth),
