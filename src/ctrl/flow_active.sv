@@ -217,7 +217,7 @@ module flow_active
   logic cmd_is_broadcast_ccc;
   i3c_cmd_attr_e cmd_attr;
   logic [4:0] dev_index;
-  logic [2:0] cmd_tid;
+  logic [3:0] cmd_tid;
   logic [15:0] data_length;
   logic imm_use_def_byte;
   logic is_direct_transfer;
@@ -325,7 +325,7 @@ module flow_active
       assigned_addr_cnt_q <= '0;
       dct_raw_data_q <= '0;
       first_nack_q <= 1'b1;
-      dat_index_q <= dev_index;
+      dat_index_q <= '0;
       dct_index_q <= '0; // TODO: #95749 base index should be the one in I3CBASE.DCT_SECTION_OFFSET.TABLE_INDEX
     end else begin
       assigned_addr_cnt_q <= assigned_addr_cnt_d;
