@@ -304,7 +304,7 @@ module controller_active
       // These should be controlled by the flow FSM
       .host_enable_i(is_i2c_transfer),
       .fmt_fifo_rvalid_i(fmt_fifo_rvalid),
-      .fmt_fifo_depth_i('h1),  // UNUSED
+      .fmt_fifo_depth_i(7'h1),  // UNUSED
       .fmt_fifo_rready_o(fmt_fifo_rready_i2c),
       .fmt_byte_i(fmt_byte),
       .fmt_flag_start_before_i(fmt_flag_start_before),
