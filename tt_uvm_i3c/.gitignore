@@ -1,0 +1,12 @@
+i3c/sim/out/
+i3c/sim/generated/
+i3c/verdiLog/
+i3c/vcd2fsdbLog/
+*.vdb/
+*.fsdb
+*.vcd
+*.vpd
+simv
+simv.*
+csrc/
+ucli.key
