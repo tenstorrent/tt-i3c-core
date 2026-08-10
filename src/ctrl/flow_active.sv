@@ -1575,8 +1575,9 @@ module flow_active
               ibi_status_d.ibi_sts = 1'b1;
               ibi_wb_d = fmt_fifo_rdone_i;
             end
-            // (OCA) the IBI Status Descriptor IBI_ID field carries the target's 7-bit dynamic address
-            ibi_status_d.ibi_id = fmt_flag_read_valid_i ? {1'b0, fmt_byte_i[7:1]} : ibi_status_q.ibi_id;
+            // (OCA) the IBI Status Descriptor IBI_ID field carries the target's 7-bit dynamic address + RnW bit
+            //       TODO: only Regular IBI is supported right now, the ibi_id will have to change if more status_types are supported
+            ibi_status_d.ibi_id = fmt_flag_read_valid_i ? fmt_byte_i : ibi_status_q.ibi_id;
             rlt_req = fmt_flag_read_valid_i;
             rlt_dynamic_address = fmt_flag_read_valid_i ? 7'(fmt_byte_i >> 1) : 7'h0;
             // Fetch DAT for next cycle
