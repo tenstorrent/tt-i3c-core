@@ -894,7 +894,7 @@ module i2c_controller_fsm
           state_d = ClockStop;
           load_tcount = 1'b1;
           tcount_sel = tClockStop;
-        end else if (!host_enable_i || (fmt_fifo_depth_i == 7'h1) || unhandled_unexp_nak_i) begin
+        end else if (!host_enable_i || (fmt_fifo_depth_i == 'h1) || unhandled_unexp_nak_i) begin
           state_d = Idle;
           load_tcount = 1'b1;
           tcount_sel = tNoDelay;

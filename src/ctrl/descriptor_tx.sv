@@ -14,6 +14,7 @@
 module descriptor_tx import i3c_pkg::*; #(
   parameter int unsigned TtiTxDescDataWidth = 32,
   parameter int unsigned TtiTxDataWidth = 8,
+  parameter int unsigned TtiTxFifoDepth = 16,
   parameter int unsigned TtiTxFifoDepthWidth = 16
 ) (
   input  logic clk_i,
@@ -58,7 +59,22 @@ module descriptor_tx import i3c_pkg::*; #(
   assign tti_tx_desc_queue_rready_o = tti_tx_desc_queue_rvalid_i && !descriptor_valid && tx_start_i
                                       && !(flush || tx_abort_i);
 
-  assign tx_desc_avail_o = tti_tx_desc_queue_rvalid_i;
+  // (OCA) Need to peek at the transaction coming in before asserting tx_desc_avail_o, 
+  //       otherwise it will ACK a private read before tx_start below. It will now instead
+  //       wait until the required amount of data exists or when the queue is full and NACK
+  //       any private read requests in the meantime
+  logic [15:0] peek_len_bytes;
+  logic [15:0] peek_len_words;
+  logic [15:0] peek_eff_words;
+  logic        tx_startable;
+
+  assign peek_len_bytes = descriptor_valid ? data_len : tti_tx_desc_queue_rdata_i[31:16];
+  assign peek_len_words = peek_len_bytes >> ($clog2(I3CCSR_pkg::I3CCSR_DATA_WIDTH/8)); // tx data queue has width based on I3CCSR_DATA_WIDTH
+  assign peek_eff_words = (peek_len_words < 16'(TtiTxFifoDepth)) ? peek_len_words
+                                                             : 16'(TtiTxFifoDepth);
+  assign tx_startable   = (16'(tti_tx_queue_depth_i) + 16'd1) >= peek_eff_words;
+
+  assign tx_desc_avail_o = tti_tx_desc_queue_rvalid_i && tx_startable;
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_
     if (!rst_ni) begin
@@ -93,11 +109,15 @@ module descriptor_tx import i3c_pkg::*; #(
     end
   end
 
-  assign data_len       = tx_descriptor[15:0];
+  // (OCA) data length is in TX descriptor bits [31:16], not [15:0]
+  assign data_len       = tx_descriptor[31:16];
   assign data_len_words = TtiTxDescDataWidth'(data_len >> 2);
   // Add 1 to depth, because there is one word in the Nto8 converter
+  // (OCA) For large transfer sizes where the data_len_words is greater than the depth of the queue,
+  //       the transfer would never start. Change so it will also start if the queue is ever full
   assign tx_start = !tx_pending && descriptor_valid &&
-                    (TtiTxDescDataWidth'(tti_tx_queue_depth_i + 1) >= data_len_words);
+                    ((TtiTxDescDataWidth'(tti_tx_queue_depth_i + 1) >= data_len_words) ||
+                     (TtiTxDescDataWidth'(tti_tx_queue_depth_i + 1) >= TtiTxFifoDepth));
 
   always_ff @(posedge clk_i or negedge rst_ni) begin : proc_tx_pending
     if (!rst_ni) begin

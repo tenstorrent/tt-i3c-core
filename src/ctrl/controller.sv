@@ -140,6 +140,10 @@ module controller
     output logic [    127:0] dct_wdata_hw_o,
     input  logic [    127:0] dct_rdata_hw_i,
 
+    // Reverse-lookup table memory interface (dynamic addr -> DAT index)
+    output rlt_mem_sink_t rlt_mem_sink_o,
+    input  rlt_mem_src_t  rlt_mem_src_i,
+
 `endif  // CONTROLLER_SUPPORT
 `ifdef TARGET_SUPPORT
     // Target Transaction Interface
@@ -515,7 +519,21 @@ module controller
 
 `ifdef CONTROLLER_SUPPORT
   // Active controller
-  controller_active xcontroller_active (
+  controller_active #(
+      .HciRespFifoDepth(HciRespFifoDepth),
+      .HciCmdFifoDepth(HciCmdFifoDepth),
+      .HciRxFifoDepth(HciRxFifoDepth),
+      .HciTxFifoDepth(HciTxFifoDepth),
+      .HciIbiFifoDepth(HciIbiFifoDepth),
+      .HciRespDataWidth(HciRespDataWidth),
+      .HciCmdDataWidth(HciCmdDataWidth),
+      .HciRxDataWidth(HciRxDataWidth),
+      .HciTxDataWidth(HciTxDataWidth),
+      .HciRespThldWidth(HciRespThldWidth),
+      .HciCmdThldWidth(HciCmdThldWidth),
+      .HciRxThldWidth(HciRxThldWidth),
+      .HciTxThldWidth(HciTxThldWidth)
+  ) xcontroller_active (
       .clk_i                       (clk_i),
       .rst_ni                      (rst_ni),
       .ctrl_bus_i                  (ctrl_bus_i[0:1]),
@@ -576,6 +594,8 @@ module controller
       .dct_index_hw_o              (dct_index_hw_o),
       .dct_wdata_hw_o              (dct_wdata_hw_o),
       .dct_rdata_hw_i              (dct_rdata_hw_i),
+      .rlt_mem_sink_o              (rlt_mem_sink_o),
+      .rlt_mem_src_i               (rlt_mem_src_i),
       .i3c_fsm_en_i                (i3c_active_en),
       .i3c_fsm_idle_o              (i3c_fsm_idle_o),
       .resume_i                    (resume),
@@ -628,7 +648,23 @@ module controller
 `endif  // CONTROLLER_SUPPORT
 `ifdef TARGET_SUPPORT
   // Standby (Secondary) Controller
-  controller_standby xcontroller_standby (
+  controller_standby #(
+      .TtiRxDescFifoDepth(TtiRxDescFifoDepth),
+      .TtiTxDescFifoDepth(TtiTxDescFifoDepth),
+      .TtiRxFifoDepth(TtiRxFifoDepth),
+      .TtiTxFifoDepth(TtiTxFifoDepth),
+      .TtiIbiFifoDepth(TtiIbiFifoDepth),
+      .TtiRxDescDataWidth(TtiRxDescDataWidth),
+      .TtiTxDescDataWidth(TtiTxDescDataWidth),
+      .TtiRxDataWidth(TtiRxDataWidth),
+      .TtiTxDataWidth(TtiTxDataWidth),
+      .TtiIbiDataWidth(TtiIbiDataWidth),
+      .TtiRxDescThldWidth(TtiRxDescThldWidth),
+      .TtiTxDescThldWidth(TtiTxDescThldWidth),
+      .TtiRxThldWidth(TtiRxThldWidth),
+      .TtiTxThldWidth(TtiTxThldWidth),
+      .TtiIbiThldWidth(TtiIbiThldWidth)
+  ) xcontroller_standby (
       .clk_i,
       .rst_ni,
       .ctrl_bus_i                     (ctrl_bus_i[2:3]),

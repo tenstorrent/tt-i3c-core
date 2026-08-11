@@ -52,13 +52,21 @@ module dxt
   logic dat_rd_ack;
   logic dat_wr_ack;
 
+  logic dat_csr_pending;  // (OCA) CSR access deferred because a HW read held the memory port
+  logic dat_csr_go;       // (OCA) CSR access takes the port this cycle (live pulse or replay)
+
   // Two 32-bit words per 64-bit word so retrieve index by shifting 3 bits
   assign dat_index_sw = csr_dat_hwif_i.addr[DatAw+2:3];
   // Second bit indicates which 32-bit word is requested by software
   assign dat_word_index_sw = csr_dat_hwif_i.addr[2];
 
-  assign dat_read_valid = csr_dat_hwif_i.req | dat_read_valid_hw_i;
-  assign dat_write_valid = csr_dat_hwif_i.req_is_wr;
+  // (OCA) HW reads cannot stall, so they always win the shared single-port memory. A CSR
+  // access colliding with a HW read is deferred and replayed once the read clears.
+  // The register block holds addr/wr_data/req_is_wr stable until we ack but pulses
+  // req for only one cycle, so the outstanding access is tracked by dat_csr_pending.
+  assign dat_csr_go      = (csr_dat_hwif_i.req | dat_csr_pending) & ~dat_read_valid_hw_i;
+  assign dat_read_valid  = dat_csr_go | dat_read_valid_hw_i;
+  assign dat_write_valid = dat_csr_go & csr_dat_hwif_i.req_is_wr;
 
   // Connect signals to DAT memory
   assign dat_rdata_hw_o = dat_mem_src_i.rdata;
@@ -109,15 +117,26 @@ module dxt
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
+      dat_csr_pending <= 1'b0;
+    end else if (csr_dat_hwif_i.req & dat_read_valid_hw_i) begin
+      dat_csr_pending <= 1'b1;  // (OCA) CSR req arrived while HW held the port
+    end else if (~dat_read_valid_hw_i) begin
+      dat_csr_pending <= 1'b0;  // (OCA) serviced once the HW read releases the port
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (~rst_ni) begin
       dat_rd_ack <= 1'b0;
       dat_wr_ack <= 1'b0;
       csr_dat_hwif_o.rd_ack <= 1'b0;
       csr_dat_hwif_o.wr_ack <= 1'b0;
     end else begin
-      dat_rd_ack <= csr_dat_hwif_i.req & ~csr_dat_hwif_i.req_is_wr & ~dat_read_valid_hw_i;
+      // (OCA) gate rd/wr acks on dat_csr_go so deferred/replayed CSR accesses ack correctly
+      dat_rd_ack <= dat_csr_go & ~csr_dat_hwif_i.req_is_wr;
       csr_dat_hwif_o.rd_ack <= dat_rd_ack;
 
-      dat_wr_ack <= csr_dat_hwif_i.req & csr_dat_hwif_i.req_is_wr;
+      dat_wr_ack <= dat_csr_go & csr_dat_hwif_i.req_is_wr;
       csr_dat_hwif_o.wr_ack <= dat_wr_ack;
     end
   end
@@ -134,12 +153,21 @@ module dxt
   logic dct_rd_ack;
   logic dct_wr_ack;
 
+  logic dct_hw_active;     // (OCA) HW holds the memory port (read or write)
+  logic dct_csr_rd_pending;  // (OCA) CSR read deferred because HW held the port
+  logic dct_csr_rd_go;       // (OCA) CSR read takes the port this cycle (live pulse or replay)
+
   // Four 32-bit words per 128-bit word so retrieve index by shifting 4 bits
   assign dct_index_sw = csr_dct_hwif_i.addr[DctAw+3:4];
   // Second and third bits indicate which 32-bit word is requested by software
   assign dct_word_index_sw = csr_dct_hwif_i.addr[3:2];
 
-  assign dct_read_valid = csr_dct_hwif_i.req | dct_read_valid_hw_i;
+  // (OCA) HW reads/writes always win the shared port; CSR writes to DCT are illegal no-ops
+  // (acked below) and never touch memory, so only CSR reads can collide and are
+  // deferred/replayed once HW releases the port (dct_csr_rd_pending).
+  assign dct_hw_active   = dct_read_valid_hw_i | dct_write_valid_hw_i;
+  assign dct_csr_rd_go   = ((csr_dct_hwif_i.req & ~csr_dct_hwif_i.req_is_wr) | dct_csr_rd_pending) & ~dct_hw_active;
+  assign dct_read_valid  = dct_csr_rd_go | dct_read_valid_hw_i;
   assign dct_write_valid = dct_write_valid_hw_i;
   assign dct_wdata = dct_wdata_hw_i;
 
@@ -177,12 +205,23 @@ module dxt
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
+      dct_csr_rd_pending <= 1'b0;
+    end else if (csr_dct_hwif_i.req & ~csr_dct_hwif_i.req_is_wr & dct_hw_active) begin
+      dct_csr_rd_pending <= 1'b1;  // (OCA) CSR read arrived while HW held the port
+    end else if (~dct_hw_active) begin
+      dct_csr_rd_pending <= 1'b0;  // (OCA) serviced once HW releases the port
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (~rst_ni) begin
       dct_rd_ack <= 1'b0;
       dct_wr_ack <= 1'b0;
       csr_dct_hwif_o.rd_ack <= 1'b0;
       csr_dct_hwif_o.wr_ack <= 1'b0;
     end else begin
-      dct_rd_ack <= csr_dct_hwif_i.req & ~csr_dct_hwif_i.req_is_wr & ~dct_read_valid_hw_i;
+      // (OCA) CSR read ack follows dct_csr_rd_go so deferred/replayed reads ack correctly
+      dct_rd_ack <= dct_csr_rd_go;
       csr_dct_hwif_o.rd_ack <= dct_rd_ack;
       // ACK write requests to remove CPU stall, even though they're illegal to DCT
       dct_wr_ack <= csr_dct_hwif_i.req & csr_dct_hwif_i.req_is_wr;

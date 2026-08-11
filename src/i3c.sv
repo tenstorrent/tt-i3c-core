@@ -204,6 +204,10 @@ module i3c
     // DCT memory export interface
     input  dct_mem_src_t  dct_mem_src_i,
     output dct_mem_sink_t dct_mem_sink_o,
+
+    // Reverse-lookup table memory export interface (dynamic addr -> DAT index)
+    input  rlt_mem_src_t  rlt_mem_src_i,
+    output rlt_mem_sink_t rlt_mem_sink_o,
 `endif  // CONTROLLER_SUPPORT
 
     // Recovery interface signals
@@ -607,6 +611,39 @@ module i3c
 `endif
 
   controller #(
+`ifdef CONTROLLER_SUPPORT
+      .HciRespFifoDepth(HciRespFifoDepth),
+      .HciCmdFifoDepth(HciCmdFifoDepth),
+      .HciRxFifoDepth(HciRxFifoDepth),
+      .HciTxFifoDepth(HciTxFifoDepth),
+      .HciIbiFifoDepth(HciIbiFifoDepth),
+      .HciRespDataWidth(HciRespDataWidth),
+      .HciCmdDataWidth(HciCmdDataWidth),
+      .HciRxDataWidth(HciRxDataWidth),
+      .HciTxDataWidth(HciTxDataWidth),
+      .HciRespThldWidth(HciRespThldWidth),
+      .HciCmdThldWidth(HciCmdThldWidth),
+      .HciRxThldWidth(HciRxThldWidth),
+      .HciTxThldWidth(HciTxThldWidth),
+`endif
+`ifdef TARGET_SUPPORT
+      .TtiRxDescFifoDepth(TtiRxDescFifoDepth),
+      .TtiTxDescFifoDepth(TtiTxDescFifoDepth),
+      .TtiRxFifoDepth(TtiRxFifoDepth),
+      .TtiTxFifoDepth(TtiTxFifoDepth),
+      .TtiIbiFifoDepth(TtiIbiFifoDepth),
+      .TtiRxDescDataWidth(TtiRxDescDataWidth),
+      .TtiTxDescDataWidth(TtiTxDescDataWidth),
+      // TTI data is a byte stream here; recovery handler packs/unpacks the 32b FIFO words
+      .TtiRxDataWidth(8),
+      .TtiTxDataWidth(8),
+      .TtiIbiDataWidth(TtiIbiDataWidth),
+      .TtiRxDescThldWidth(TtiRxDescThldWidth),
+      .TtiTxDescThldWidth(TtiTxDescThldWidth),
+      .TtiRxThldWidth(TtiRxThldWidth),
+      .TtiTxThldWidth(TtiTxThldWidth),
+      .TtiIbiThldWidth(TtiIbiThldWidth),
+`endif
       .DatAw(DatAw),
       .DctAw(DctAw)
   ) xcontroller (
@@ -762,6 +799,10 @@ module i3c
       .dct_index_hw_o(dct_index_hw),
       .dct_wdata_hw_o(dct_wdata_hw),
       .dct_rdata_hw_i(dct_rdata_hw),
+
+      // Reverse-lookup table memory interface
+      .rlt_mem_sink_o(rlt_mem_sink_o),
+      .rlt_mem_src_i (rlt_mem_src_i),
 `endif
       .i3c_fsm_en_i(i3c_fsm_en_i),
       .i3c_fsm_idle_o(i3c_fsm_idle_o),
@@ -1023,6 +1064,7 @@ module i3c
       .tx_desc_queue_data_o        (csr_tti_tx_desc_data),
       .tx_desc_queue_ready_thld_o  (csr_tti_tx_desc_ready_thld_i),
       .tx_desc_queue_ready_thld_i  (csr_tti_tx_desc_ready_thld_o),
+      .tx_desc_queue_ready_thld_trig_i(tti_tx_desc_ready_thld_trig),
       .tx_desc_queue_reg_rst_o     (csr_tti_tx_desc_reg_rst),
       .tx_desc_queue_reg_rst_we_i  (csr_tti_tx_desc_reg_rst_we),
       .tx_desc_queue_reg_rst_data_i(csr_tti_tx_desc_reg_rst_data),
@@ -1055,6 +1097,7 @@ module i3c
       .tx_data_queue_reg_rst_we_i  (csr_tti_tx_data_reg_rst_we),
       .tx_data_queue_reg_rst_data_i(csr_tti_tx_data_reg_rst_data),
       .tx_data_queue_full_i        (csr_tti_tx_data_full),
+      .tx_data_queue_ready_thld_trig_i(tti_tx_ready_thld_trig),
 
       // TTI In-band Interrupt (IBI) queue
       .ibi_queue_full_i        (tti_ibi_full),
@@ -1063,6 +1106,7 @@ module i3c
       .ibi_queue_ack_i         (csr_tti_ibi_ack),
       .ibi_queue_data_o        (csr_tti_ibi_data),
       .ibi_queue_ready_thld_o  (csr_tti_ibi_ready_thld),
+      .ibi_queue_ready_thld_trig_i(tti_ibi_ready_thld_trig),
       .ibi_queue_reg_rst_o     (csr_tti_ibi_reg_rst),
       .ibi_queue_reg_rst_we_i  (csr_tti_ibi_reg_rst_we),
       .ibi_queue_reg_rst_data_i(csr_tti_ibi_reg_rst_data),

@@ -27,6 +27,16 @@ module ctrl_bus_tx (
     // Open Drain / Push Pull
     input logic sel_od_pp_i,
 
+    // (OCA) actual value currently on the bus (registered ctrl_sda_o at the FSM
+    // level). Held while waiting for an SCL negedge so this cell never glitches
+    // the line after another driver (e.g. the START/STOP gen) had control.
+    input logic sda_hold_i,
+
+    // (OCA) handoff cue: when set, release SDA (drive 1) at the SCL negedge that
+    // ends the current bit instead of holding it through t_hd_dat. Used for the
+    // IBI ACK so the controller lets go of the line for the target's data phase.
+    input logic release_i,
+
     output logic tx_idle_o,
     output logic tx_done_o,  // Indicate finished bit write
 
@@ -114,7 +124,7 @@ module ctrl_bus_tx (
   assign tx_idle_o = (state_q == Idle);
 
   always_comb begin : tx_fsm_outputs
-    sda_o = '1;
+    sda_o = sda_hold_i;  // default: hold the actual bus value while waiting
     tx_done_o = '0;  // Assign to 1 only after transmitting a bit
     load_tcount = '0;
     tcount_sel = tNoDelay;
@@ -127,6 +137,9 @@ module ctrl_bus_tx (
           if (t_sd_z & (scl_stable_low_i | scl_negedge_i)) begin
             sda_o = drive_value_i;
           end
+        end else begin
+          // (OCA) only when truly idle should the line be released
+          sda_o = 1'b1;
         end
       end
       AwaitClockNegedge: begin
@@ -137,24 +150,25 @@ module ctrl_bus_tx (
         end
       end
       SetupData: begin
-        if (tcount_q == 20'd1) begin
-          sda_o = drive_value_i;
-        end
+        // SCL is low here; present the data for the whole setup window (the
+        // default now holds the old line value, so drive explicitly)
+        sda_o = drive_value_i;
       end
       TransmitData: begin
-        sda_o = drive_value_i;
+        sda_o = drive_value_i;  // drive the bit through the whole SCL-high phase
         if (scl_negedge_i) begin
           tcount_sel  = tHoldData;
           load_tcount = '1;
-          if (t_hd_z) tx_done_o = '1;
+          // (OCA) IBI handoff: release SDA right at the negedge (SCL low), not during the high phase
+          // -- the ACK stays driven through SCL-high (no float/false-STOP), and the controller is off
+          // the line as SCL falls so the target can drive the data phase. No data-hold time needed.
+          if (release_i) sda_o = 1'b1;
+          if (t_hd_z | release_i) tx_done_o = '1;
         end
       end
       HoldData: begin
-        if (tcount_q != 20'd0) begin
-          sda_o = drive_value_i;
-        end else begin
-          tx_done_o = '1;
-        end
+        sda_o = drive_value_i;
+        if (tcount_q == 20'd0) tx_done_o = '1;
       end
       default: begin
         sda_o = '1;
@@ -183,7 +197,7 @@ module ctrl_bus_tx (
         if (tcount_q == 20'd1) state_d = TransmitData;
       end
       TransmitData: begin
-        if (scl_negedge_i) state_d = (t_hd_z) ? Idle : HoldData;
+        if (scl_negedge_i) state_d = (t_hd_z | release_i) ? Idle : HoldData;
       end
       HoldData: begin
         if (tcount_q == 20'd0 & scl_stable_low_i) state_d = Idle;

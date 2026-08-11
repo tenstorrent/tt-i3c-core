@@ -103,6 +103,10 @@ module controller_active
     output logic [                 127:0] dct_wdata_hw_o,
     input  logic [                 127:0] dct_rdata_hw_i,
 
+    // Reverse-lookup table memory interface (dynamic addr -> DAT index)
+    output rlt_mem_sink_t rlt_mem_sink_o,
+    input  rlt_mem_src_t  rlt_mem_src_i,
+
     input  logic i3c_fsm_en_i,
     output logic i3c_fsm_idle_o,
     input  logic pio_rs_i,
@@ -183,6 +187,16 @@ module controller_active
   assign fmt_fifo_rready_i2c_and_i3c = (fmt_fifo_rready & ~is_i2c_transfer) | ((fmt_fifo_rready_i2c | i2c_host_idle) & is_i2c_transfer);
   assign fmt_fifo_rdone_i2c_and_i3c = (fmt_fifo_rdone & ~is_i2c_transfer) | ((fmt_fifo_rready_i2c) & is_i2c_transfer);
 
+  // (OCA) Calculate data that the IBI queue can store
+  localparam int unsigned IbiMaxDwordsW = $clog2(`IBI_BUFFER_DEPTH + 1);
+  logic [HciIbiFifoDepthWidth-1:0] ibi_queue_free;
+  logic [HciIbiFifoDepthWidth-1:0] ibi_queue_free_data;
+  logic [IbiMaxDwordsW-1:0]        ibi_max_data_dwords;
+  assign ibi_queue_free      = HciIbiFifoDepth - ibi_queue_depth_i;
+  assign ibi_max_data_dwords = (ibi_queue_free > `IBI_BUFFER_DEPTH)
+                             ? IbiMaxDwordsW'(`IBI_BUFFER_DEPTH)
+                             : IbiMaxDwordsW'(ibi_queue_free);
+
   flow_active flow_fsm (
       .clk_i,
       .rst_ni,
@@ -194,6 +208,7 @@ module controller_active
       .cmd_queue_rready_o,
       .cmd_queue_rdata_i,
       .rx_queue_full_i,
+      .rx_queue_depth_i,    // (OCA) new port into flow_active
       .rx_queue_start_thld_i,
       .rx_queue_start_thld_trig_i,
       .rx_queue_ready_thld_i,
@@ -203,6 +218,7 @@ module controller_active
       .rx_queue_wready_i,
       .rx_queue_wdata_o,
       .tx_queue_full_i,
+      .tx_queue_depth_i,    // (OCA) new port into flow_active
       .tx_queue_start_thld_i,
       .tx_queue_start_thld_trig_i,
       .tx_queue_ready_thld_i,
@@ -222,6 +238,7 @@ module controller_active
       .ibi_queue_ready_thld_i,
       .ibi_queue_ready_thld_trig_i,
       .ibi_queue_empty_i,
+      .ibi_max_data_dwords_i       (ibi_max_data_dwords),
       .ibi_queue_wvalid_o,
       .ibi_queue_wready_i,
       .ibi_queue_wdata_o,
@@ -234,6 +251,8 @@ module controller_active
       .dct_index_hw_o,
       .dct_wdata_hw_o,
       .dct_rdata_hw_i,
+      .rlt_mem_sink_o,
+      .rlt_mem_src_i,
       .host_enable_o             (host_enable),
       .is_i2c_transfer_o         (is_i2c_transfer),
       .i2c_cmd_complete_i        (event_cmd_complete),
@@ -285,7 +304,7 @@ module controller_active
       // These should be controlled by the flow FSM
       .host_enable_i(is_i2c_transfer),
       .fmt_fifo_rvalid_i(fmt_fifo_rvalid),
-      .fmt_fifo_depth_i(8'd1),  // UNUSED
+      .fmt_fifo_depth_i(7'h1),  // UNUSED
       .fmt_fifo_rready_o(fmt_fifo_rready_i2c),
       .fmt_byte_i(fmt_byte),
       .fmt_flag_start_before_i(fmt_flag_start_before),
