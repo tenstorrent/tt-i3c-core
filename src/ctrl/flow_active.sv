@@ -1649,6 +1649,12 @@ module flow_active
             if (ibi_wb_cnt_q == '0) begin  // First entry is the IBI Status Descriptor
               ibi_queue_wdata_o  = ibi_status_q;
               ibi_queue_wvalid_o = 1'b1;
+              // (OCA) A rejected IBI carries no payload. The lese branch below always
+              // emits one data DWORD, so a zero-length record must finish here
+              if (((ibi_status_q.data_length + 3) >> 2) == '0) begin
+                ibi_done = 1'b1;
+                ibi_wb_d = 1'b0;
+              end
             end else if (ibi_wb_cnt_q < ((ibi_status_q.data_length + 3) >> 2)) begin
               ibi_queue_wdata_o  = ibi_data_q[ibi_wb_cnt_q-1];
               ibi_queue_wvalid_o = 1'b1;
