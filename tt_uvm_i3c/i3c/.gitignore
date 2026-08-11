@@ -1,5 +1,3 @@
-sim/out/
-sim/generated/
 *.log
 *.vdb/
 *.fsdb
