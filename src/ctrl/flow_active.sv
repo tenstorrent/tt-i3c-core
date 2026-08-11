@@ -305,6 +305,13 @@ module flow_active
 
   // IBI signals
   logic ibi_abort, ibi_done;
+  // IBI policy is resolved from the DAT entry belonging to the requesting Target.
+  // dat_rdata only holds that entry once dat_captured pulses (3 cycles after the
+  // address byte), so the ACK/NACK must not be taken from it before then.
+  logic [6:0] ibi_req_da_d, ibi_req_da_q;
+  logic ibi_pol_valid_d, ibi_pol_valid_q;
+  logic ibi_pol_abort_d, ibi_pol_abort_q;
+  logic ibi_dat_hit;
   i3c_ibi_status_desc_t ibi_status_d, ibi_status_q;
   logic [  $clog2(IBIBufferDepthDwords)-1:0] ibi_dword_select;
   logic [$clog2((HciIbiDataWidth >> 3))-1:0] ibi_byte_select;
@@ -633,6 +640,24 @@ module flow_active
     end
   end
 
+  // Store the IBI requester address and the policy resolved for it
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (~rst_ni) begin
+      ibi_req_da_q    <= '0;
+      ibi_pol_valid_q <= 1'b0;
+      ibi_pol_abort_q <= 1'b0;
+    end else begin
+      ibi_req_da_q    <= ibi_req_da_d;
+      ibi_pol_valid_q <= ibi_pol_valid_d;
+      ibi_pol_abort_q <= ibi_pol_abort_d;
+    end
+  end
+
+  // The DAT entry carries its own dynamic address, so it doubles as a tag: the
+  // reverse lookup table has no miss indication and returns index 0 for an
+  // unprogrammed address, which would otherwise alias onto a valid entry.
+  assign ibi_dat_hit = (dat_rdata.dynamic_address[6:0] == ibi_req_da_q);
+
   // Combinational state output update
   always_comb begin
     i3c_fsm_idle_o = 1'b0;
@@ -679,6 +704,9 @@ module flow_active
     prev_cmd_toc_d = prev_cmd_toc_q;
     ibi_done = 1'b0;
     ibi_abort = 1'b0;
+    ibi_req_da_d = ibi_req_da_q;
+    ibi_pol_valid_d = ibi_pol_valid_q;
+    ibi_pol_abort_d = ibi_pol_abort_q;
     ibi_status_d = ibi_status_q;
     ibi_data_d = ibi_data_q;
     ibi_wb_d = ibi_wb_q;
@@ -1555,7 +1583,9 @@ module flow_active
         fmt_flag_stop_after_o = 1'b0;
         fmt_flag_restart_after_o = 1'b0;
         ibi_data_d = ibi_data_q;
-        ibi_abort = dat_rdata.ibi_reject | ~dat_rdata.ibi_payload | (ibi_max_data_dwords_i == '0);
+        // Only the queue-capacity term is known without the DAT fetch; the
+        // DAT-derived terms are held off until the fetch for this requester lands.
+        ibi_abort = (ibi_pol_valid_q & ibi_pol_abort_q) | (ibi_max_data_dwords_i == '0);
         rlt_req = 1'b0;
         if (~ibi_wb_q) begin
           if (transfer_cnt_q == '0) begin
@@ -1584,6 +1614,16 @@ module flow_active
             dat_index_hw_o = rlt_dat_index;
             dat_read_valid_hw_o = rlt_valid;
             transfer_cnt_en = fmt_fifo_rdone_i;
+            // Capture the requester and invalidate the previous resolution, then
+            // resolve once the DAT entry for this requester has been captured.
+            if (fmt_flag_read_valid_i) begin
+              ibi_req_da_d = 7'(fmt_byte_i >> 1);
+              ibi_pol_valid_d = 1'b0;
+              ibi_pol_abort_d = 1'b0;
+            end else if (dat_captured & ~ibi_pol_valid_q) begin
+              ibi_pol_abort_d = ~ibi_dat_hit | dat_rdata.ibi_reject | ~dat_rdata.ibi_payload;
+              ibi_pol_valid_d = 1'b1;
+            end
           end else begin
             // (OCA) bound the IBI by what actually fits in the IBI queue right now
             if (transfer_cnt_q == (ibi_max_data_dwords_i << 2)) begin
