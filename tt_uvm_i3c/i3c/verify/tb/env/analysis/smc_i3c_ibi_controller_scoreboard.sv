@@ -101,10 +101,12 @@ class smc_i3c_ibi_controller_scoreboard extends uvm_scoreboard;
     expected_size = expected.expected_ack ?
       ((expected.mdb_present ? 1 : 0) + expected.payload_len) : 0;
     failed = actual.size() != expected_size;
-    if (!failed && expected.mdb_present &&
+    // A rejected IBI transfers no bytes, so mdb_present/payload_len describe what
+    // the Target intended to send, not what should appear in the FIFO.
+    if (!failed && expected.expected_ack && expected.mdb_present &&
         (actual[0] !== expected.mdb))
       failed = 1'b1;
-    if (!failed) begin
+    if (!failed && expected.expected_ack) begin
       for (int unsigned index = 0;
            index < expected.payload_len; index++) begin
         if ((index >= expected.payload.size()) ||
@@ -222,10 +224,10 @@ class smc_i3c_ibi_controller_scoreboard extends uvm_scoreboard;
       mismatch("arbitration", "target did not win IBI address arbitration");
     else
       match("arbitration");
-    if (actual.ibi_id !== {1'b0, expected.target_addr})
+    if (actual.ibi_id !== {expected.target_addr, 1'b1})
       mismatch("HCI IBI_ID",
                $sformatf("expected=0x%02h actual=0x%02h",
-                         {1'b0, expected.target_addr}, actual.ibi_id));
+                         {expected.target_addr, 1'b1}, actual.ibi_id));
     else
       match("HCI IBI_ID");
     if (actual.data_length != expected_bytes)

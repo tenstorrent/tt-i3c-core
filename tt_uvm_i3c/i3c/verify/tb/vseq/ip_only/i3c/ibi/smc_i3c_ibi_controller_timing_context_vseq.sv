@@ -363,12 +363,12 @@ class smc_i3c_ibi_controller_timing_context_vseq extends
     wait_irq(1'b0, {operation, " wait for IRQ clear"});
 
     hci_ok = 1'b1;
-    if (descriptor[15:8] !== {1'b0, vseq_ctx.cfg.ibi_target_addr}) begin
+    if (descriptor[15:8] !== {vseq_ctx.cfg.ibi_target_addr, 1'b1}) begin
       hci_ok = 1'b0;
       `uvm_error("IBI_TIMING_IBI_ID",
-                 $sformatf("%s HCI IBI_ID expected zero-extended DA=0x%02h actual=0x%02h; bus RnW is checked separately",
+                 $sformatf("%s HCI IBI_ID expected {DA,RnW}=0x%02h actual=0x%02h",
                            operation,
-                           {1'b0, vseq_ctx.cfg.ibi_target_addr},
+                           {vseq_ctx.cfg.ibi_target_addr, 1'b1},
                            descriptor[15:8]))
     end
     observed_mdb = hci_data.size() ? hci_data[0] : 8'h00;

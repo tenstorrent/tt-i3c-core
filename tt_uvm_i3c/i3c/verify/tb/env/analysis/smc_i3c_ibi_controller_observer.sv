@@ -67,7 +67,7 @@ class smc_i3c_ibi_controller_observer extends uvm_component;
         return 1'b1;
       end
     end
-    addr = ibi_id[6:0];
+    addr = ibi_id[7:1];
     return 1'b0;
   endfunction
 
@@ -252,9 +252,9 @@ class smc_i3c_ibi_controller_observer extends uvm_component;
       active_hci.descriptor = word;
       active_hci.data_length = word[7:0];
       active_hci.ibi_id = word[15:8];
-      // A Regular IBI status descriptor carries the target's seven-bit
-      // dynamic address zero-extended in IBI_ID. Retain compatibility parsing
-      // for a shifted address so the scoreboard reports a field mismatch
+      // A Regular IBI status descriptor carries the bus header byte
+      // {DA[6:0], RnW} in IBI_ID. Retain compatibility parsing for the
+      // zero-extended address so the scoreboard reports a field mismatch
       // instead of degrading into a correlation timeout.
       void'(decode_ibi_addr(word[15:8], active_hci.addr));
       active_hci.chunks = word[23:16];
