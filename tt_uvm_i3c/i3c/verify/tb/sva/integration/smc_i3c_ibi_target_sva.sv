@@ -16,8 +16,8 @@
 //
 // File        : smc_i3c_ibi_target_sva.sv
 // Description : Assertions and cover properties for I3C IBI target.
-// Authors     : Duy Huynh, Dang Thai
-// Date        : 2026-07-28
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
+// Date        : 2026-08-12
 //
 // *****************************************************************************
 
@@ -38,17 +38,21 @@ module smc_i3c_ibi_target_sva (
   logic [3:0] bit_count;
   logic [7:0] header;
   logic scl_sample_pulse = 1'b0;
+  int unsigned target_attempt;
+  int unsigned sampled_attempt;
 
   // Qualify START with DUT ownership so Controller-originated setup traffic is
   // not misclassified as a Target IBI.
   always @(posedge sda or negedge sda or negedge rst_n) begin
-    if (!rst_n)
+    if (!rst_n) begin
       in_frame <= 1'b0;
-    else if (enable && (scl === 1'b1)) begin
+      target_attempt <= 0;
+    end else if (enable && (scl === 1'b1)) begin
       if ((sda === 1'b0) && (dut_sda_drive_enable === 1'b1) &&
-          (dut_sda_value === 1'b0))
+          (dut_sda_value === 1'b0)) begin
         in_frame <= 1'b1;
-      else if (sda === 1'b1)
+        target_attempt <= target_attempt + 1;
+      end else if (sda === 1'b1)
         in_frame <= 1'b0;
     end
   end
@@ -73,15 +77,20 @@ module smc_i3c_ibi_target_sva (
       nack_active <= 1'b0;
       bit_count <= '0;
       header <= '0;
+      sampled_attempt <= 0;
     end else if (!enable || !in_frame) begin
       frame_sampled <= 1'b0;
       response_seen <= 1'b0;
       nack_active <= 1'b0;
       bit_count <= '0;
       header <= '0;
+      sampled_attempt <= target_attempt;
     end else begin
-      frame_sampled <= 1'b1;
-      if (!frame_sampled) begin
+      if (!frame_sampled || (sampled_attempt != target_attempt)) begin
+        frame_sampled <= 1'b1;
+        response_seen <= 1'b0;
+        nack_active <= 1'b0;
+        sampled_attempt <= target_attempt;
         header <= {7'b0, sda};
         bit_count <= 1;
       end else if (bit_count < 8) begin
@@ -95,24 +104,37 @@ module smc_i3c_ibi_target_sva (
     end
   end
 
+  // A different resolved header is legal when another Target has a lower
+  // dynamic address. In that case this DUT lost arbitration; it must release
+  // SDA and must not be checked as the owner of the rest of that frame.
+  ap_target_releases_after_arbitration_loss: assert property (
+    @(posedge scl_sample_pulse) disable iff (!rst_n || !enable)
+    in_frame && (bit_count == 8) &&
+    (header != {target_addr, 1'b1}) |-> !dut_sda_drive_enable)
+    else $error("SVA: ap_target_releases_after_arbitration_loss");
+
   ap_target_header: assert property (@(posedge scl_sample_pulse)
     disable iff (!rst_n || !enable)
-    in_frame && (bit_count == 8) |-> (header == {target_addr, 1'b1}))
+    in_frame && (bit_count == 8) |->
+      (header <= {target_addr, 1'b1}))
     else $error("SVA: ap_target_header");
 
   ap_target_releases_response_bit: assert property (
     @(posedge scl_sample_pulse) disable iff (!rst_n || !enable)
-    in_frame && (bit_count == 8) |-> !dut_sda_drive_enable)
+    in_frame && (bit_count == 8) &&
+    (header == {target_addr, 1'b1}) |-> !dut_sda_drive_enable)
     else $error("SVA: ap_target_releases_response_bit");
 
   ap_target_no_data_after_nack: assert property (
     @(posedge scl_sample_pulse) disable iff (!rst_n || !enable)
-    in_frame && nack_active |-> !dut_sda_drive_enable)
+    in_frame && (header == {target_addr, 1'b1}) &&
+    nack_active |-> !dut_sda_drive_enable)
     else $error("SVA: ap_target_no_data_after_nack");
 
   ap_target_stop_after_response: assert property (@(posedge sda)
     disable iff (!rst_n || !enable)
-    (scl === 1'b1) && in_frame |-> response_seen)
+    (scl === 1'b1) && in_frame &&
+    (bit_count >= 8) && (header == {target_addr, 1'b1}) |-> response_seen)
     else $error("SVA: ap_target_stop_after_response");
 
   cp_target_ibi_ack: cover property (@(posedge scl_sample_pulse)

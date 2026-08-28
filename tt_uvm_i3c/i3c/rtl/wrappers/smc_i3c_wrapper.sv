@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 VNCHIP LABS
+// Authors: Huynh Pham Anh Duy, Thai Hai Dang
+//
+// OCAH SMC integration wrapper around the external TT I3C core.
+
 `timescale 1ns/1ps
 
 module smc_i3c_wrapper #(

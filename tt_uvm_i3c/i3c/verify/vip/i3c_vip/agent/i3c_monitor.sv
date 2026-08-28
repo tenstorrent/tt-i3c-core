@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+// Derived from the CHIPS Alliance I3C UVM VIP and vendored through
+// the Tenstorrent tt-i3c-core fork.
+
 class i3c_monitor extends uvm_monitor;
   `uvm_component_utils(i3c_monitor)
 

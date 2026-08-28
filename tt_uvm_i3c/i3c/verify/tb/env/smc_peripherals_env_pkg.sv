@@ -16,8 +16,8 @@
 //
 // File        : smc_peripherals_env_pkg.sv
 // Description : UVM environment package for SMC peripherals.
-// Authors     : Duy Huynh, Dang Thai
-// Date        : 2026-07-25
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
+// Date        : 2026-08-06
 //
 // *****************************************************************************
 
@@ -25,8 +25,14 @@ package smc_peripherals_env_pkg;
     import uvm_pkg::*;
     `include "uvm_macros.svh"
 
+    // BCR IBI capability bits shared by Controller reference checking and
+    // IBI scenario construction.  Keep the values aligned with the existing
+    // base IBI vseq contract.
+    localparam int unsigned SMC_I3C_BCR_IBI_CAPABLE_BIT = 1;
+    localparam int unsigned SMC_I3C_BCR_MDB_CAPABLE_BIT = 2;
+
     import smc_peripherals_tb_params_pkg::*;
-    import axi4lite_vip_pkg::*;   // bundled AXI4-Lite VIP
+    import axi4lite_vip_pkg::*;   // package-local AXI4-Lite VIP
     import smc_i3c_coverage_pkg::*;
     import smc_peripherals_ral_pkg::*;
 `ifdef SMC_USE_I3C_RTL
@@ -58,11 +64,16 @@ package smc_peripherals_env_pkg;
 `ifdef SMC_USE_I3C_RAL
     `include "smc_i3c_controller_hci_helper.sv"
 `endif
+`ifdef SMC_USE_I3C_RTL
+`ifdef SMC_USE_I3C_RAL
+    `include "smc_i3c_ibi_transaction.sv"
+    `include "smc_i3c_ibi_recovery_checker.sv"
+`endif
+`endif
     `include "smc_peripherals_vseq_context.sv"
     `include "smc_peripherals_scoreboard.sv"
 `ifdef SMC_USE_I3C_RTL
 `ifdef SMC_USE_I3C_RAL
-    `include "smc_i3c_ibi_transaction.sv"
     `include "smc_i3c_ibi_sva_probe.sv"
     `include "smc_i3c_ibi_predictor.sv"
     `include "smc_i3c_ibi_observer.sv"

@@ -16,7 +16,7 @@
 //
 // File        : axi4lite_item.sv
 // Description : AXI4-Lite read/write transaction item.
-// Authors     : Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-28
 //
 // *****************************************************************************

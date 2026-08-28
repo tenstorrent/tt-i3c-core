@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_ibi_bus_sva.sv
 // Description : Assertions and cover properties for I3C IBI bus.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-28
 //
 // *****************************************************************************
@@ -60,6 +60,10 @@ module smc_i3c_ibi_bus_sva #(
     enable && dut_sda_drive_enable |-> !$isunknown(dut_sda_value))
     else $error("SVA: ap_dut_drive_known");
 
+  // Check the bound throughout an active frame. The previous endpoint-only
+  // implication had no success attempts for every normal frame that ended
+  // before the timeout, making assertion coverage vacuous despite correct
+  // traffic.
   ap_ibi_frame_bounded: assert property (@(posedge clk) disable iff (!rst_n)
     enable && in_frame |-> frame_age_cycles < FRAME_TIMEOUT_CYCLES)
     else $error("SVA: ap_ibi_frame_bounded");

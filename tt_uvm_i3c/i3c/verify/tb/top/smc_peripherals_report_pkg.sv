@@ -16,7 +16,7 @@
 //
 // File        : smc_peripherals_report_pkg.sv
 // Description : UVM report-formatting package for SMC peripherals.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-16
 //
 // *****************************************************************************

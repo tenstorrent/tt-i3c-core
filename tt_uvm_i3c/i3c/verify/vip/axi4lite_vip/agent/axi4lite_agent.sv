@@ -16,7 +16,7 @@
 //
 // File        : axi4lite_agent.sv
 // Description : Active/passive UVM agent for AXI4-Lite.
-// Authors     : Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-28
 //
 // *****************************************************************************

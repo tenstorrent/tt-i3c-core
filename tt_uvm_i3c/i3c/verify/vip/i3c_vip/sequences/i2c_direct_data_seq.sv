@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+// Derived from the CHIPS Alliance I3C UVM VIP and vendored through
+// the Tenstorrent tt-i3c-core fork.
+
 class i2c_direct_data_seq extends uvm_sequence#(i3c_seq_item, i3c_seq_item);
   `uvm_declare_p_sequencer(i3c_sequencer)
   `uvm_object_utils(i2c_direct_data_seq)

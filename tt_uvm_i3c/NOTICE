@@ -3,12 +3,12 @@ Copyright (c) 2026 VNCHIP LABS
 
 This distribution is licensed under the Apache License, Version 2.0.
 
-The self-contained I3C VIP was initially vendored from
-tenstorrent/tt-i3c-core at commit
-ff1626f356a948f0512739ddd1103cf385cb0ed7. That implementation is derived from
-the CHIPS Alliance I3C project. Existing upstream copyright and SPDX headers
-are retained. Some utility and transaction files retain lowRISC/OpenTitan
-copyright notices.
+The self-contained I3C VIP originates from the CHIPS Alliance I3C project,
+including development by Antmicro contributors. It was vendored through the
+Tenstorrent tt-i3c-core fork at commit
+ff1626f356a948f0512739ddd1103cf385cb0ed7. Existing upstream copyright and
+SPDX headers are retained. Some utility and transaction files retain
+lowRISC/OpenTitan copyright notices.
 
 The AXI4-Lite VIP and the standalone integration, checking, coverage, SVA, and
 runner adaptations carry VNCHIP LABS notices where applicable.

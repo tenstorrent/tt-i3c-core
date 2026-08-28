@@ -16,8 +16,8 @@
 //
 // File        : smc_i3c_ibi_controller_observer.sv
 // Description : Passive observer for I3C IBI controller.
-// Authors     : Duy Huynh, Dang Thai
-// Date        : 2026-07-25
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
+// Date        : 2026-08-06
 //
 // *****************************************************************************
 
@@ -61,8 +61,7 @@ class smc_i3c_ibi_controller_observer extends uvm_component;
                                          output bit [6:0] addr);
     foreach (cfg.ibi_controller_dat_valid_by_addr[candidate]) begin
       if (cfg.ibi_controller_dat_valid_by_addr[candidate] &&
-          ((ibi_id == {1'b0, candidate}) ||
-           (ibi_id == {candidate, 1'b1}))) begin
+          (ibi_id == {candidate, 1'b1})) begin
         addr = candidate;
         return 1'b1;
       end
@@ -92,6 +91,48 @@ class smc_i3c_ibi_controller_observer extends uvm_component;
     return item.addr ==
       cfg.ral_model.PIOControl.IBI_PORT.get_address(
         cfg.ral_model.default_map);
+  endfunction
+
+  protected function bit matches_reg(
+      axi4lite_item #(TB_ADDR_WIDTH, TB_DATA_WIDTH) item,
+      uvm_reg register_handle);
+    return item.addr == register_handle.get_address(
+      cfg.ral_model.default_map);
+  endfunction
+
+  protected function uvm_reg_data_t extract_field(
+      uvm_reg_data_t register_value,
+      uvm_reg_field field_handle);
+    uvm_reg_data_t field_value;
+
+    field_value = '0;
+    for (int unsigned bit_index = 0;
+         bit_index < field_handle.get_n_bits(); bit_index++) begin
+      field_value[bit_index] =
+        register_value[field_handle.get_lsb_pos() + bit_index];
+    end
+    return field_value;
+  endfunction
+
+  protected function void flush_pending_hci_observations();
+    foreach (target_q[index]) begin
+      if (!next_hci_sequence_by_addr.exists(target_q[index].addr) ||
+          (next_hci_sequence_by_addr[target_q[index].addr] <=
+           target_q[index].source_sequence))
+        next_hci_sequence_by_addr[target_q[index].addr] =
+          target_q[index].source_sequence + 1;
+      if (!next_passive_sequence_by_addr.exists(target_q[index].addr) ||
+          (next_passive_sequence_by_addr[target_q[index].addr] <=
+           target_q[index].source_sequence))
+        next_passive_sequence_by_addr[target_q[index].addr] =
+          target_q[index].source_sequence + 1;
+    end
+    target_q.delete();
+    passive_q.delete();
+    completed_q.delete();
+    active_hci = null;
+    hci_words_remaining = 0;
+    pending_irq_credits = 0;
   endfunction
 
   protected function int find_target_index(
@@ -150,7 +191,9 @@ class smc_i3c_ibi_controller_observer extends uvm_component;
     if ((index < 0) || (index >= completed_q.size()))
       return;
     actual = completed_q[index];
-    if (!actual.hci_complete || !actual.target_seen || !actual.irq_seen)
+    if (!actual.hci_complete || !actual.target_seen)
+      return;
+    if (cfg.require_ibi_controller_record_irq && !actual.irq_seen)
       return;
     if (cfg.require_ibi_passive_monitor_match && !actual.passive_seen)
       return;
@@ -240,9 +283,20 @@ class smc_i3c_ibi_controller_observer extends uvm_component;
   virtual function void write_ibi_ctrl_observer_axi(
       axi4lite_item #(TB_ADDR_WIDTH, TB_DATA_WIDTH) item);
     bit [31:0] word;
+    uvm_reg_data_t reset_value;
 
-    if ((item == null) || item.write || (item.resp != 2'b00) ||
-        !matches_ibi_port(item))
+    if ((item == null) || (item.resp != 2'b00))
+      return;
+    if (item.write) begin
+      if (matches_reg(item, cfg.ral_model.I3CBase.RESET_CONTROL)) begin
+        reset_value = extract_field(
+          item.data, cfg.ral_model.I3CBase.RESET_CONTROL.IBI_QUEUE_RST);
+        if (reset_value[0])
+          flush_pending_hci_observations();
+      end
+      return;
+    end
+    if (!matches_ibi_port(item))
       return;
     word = item.rdata[31:0];
     if (active_hci == null) begin
@@ -253,9 +307,7 @@ class smc_i3c_ibi_controller_observer extends uvm_component;
       active_hci.data_length = word[7:0];
       active_hci.ibi_id = word[15:8];
       // A Regular IBI status descriptor carries the bus header byte
-      // {DA[6:0], RnW} in IBI_ID. Retain compatibility parsing for the
-      // zero-extended address so the scoreboard reports a field mismatch
-      // instead of degrading into a correlation timeout.
+      // {DA[6:0], RnW} in IBI_ID.
       void'(decode_ibi_addr(word[15:8], active_hci.addr));
       active_hci.chunks = word[23:16];
       active_hci.last_status = word[24];
@@ -336,7 +388,7 @@ class smc_i3c_ibi_controller_observer extends uvm_component;
                  "HCI IBI record ended with missing data DWORDs")
     if (completed_q.size() != 0)
       `uvm_error("IBI_CTRL_OBSERVER_PENDING",
-                 $sformatf("%0d completed HCI record(s) lack target/IRQ/passive evidence",
+                 $sformatf("%0d completed HCI record(s) lack required target/IRQ/passive evidence",
                            completed_q.size()))
     if (target_q.size() != 0)
       `uvm_error("IBI_CTRL_OBSERVER_TARGET",

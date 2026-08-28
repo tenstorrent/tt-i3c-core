@@ -16,8 +16,8 @@
 //
 // File        : smc_i3c_ibi_coverage.sv
 // Description : Functional coverage collector for I3C IBI.
-// Authors     : Duy Huynh, Dang Thai
-// Date        : 2026-07-24
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
+// Date        : 2026-08-06
 //
 // *****************************************************************************
 
@@ -30,6 +30,7 @@ class smc_i3c_ibi_coverage extends uvm_subscriber #(smc_i3c_ibi_item);
   smc_i3c_ibi_attempt_coverage    attempt_cov;
   smc_i3c_ibi_completion_coverage completion_cov;
   smc_i3c_ibi_queue_irq_coverage  queue_irq_cov;
+  smc_i3c_ibi_recovery_coverage   recovery_cov;
 
   function new(string name = "smc_i3c_ibi_coverage",
                uvm_component parent = null);
@@ -41,6 +42,7 @@ class smc_i3c_ibi_coverage extends uvm_subscriber #(smc_i3c_ibi_item);
     attempt_cov    = smc_i3c_ibi_attempt_coverage::type_id::create("attempt_cov");
     completion_cov = smc_i3c_ibi_completion_coverage::type_id::create("completion_cov");
     queue_irq_cov  = smc_i3c_ibi_queue_irq_coverage::type_id::create("queue_irq_cov");
+    recovery_cov   = smc_i3c_ibi_recovery_coverage::type_id::create("recovery_cov");
   endfunction
 
   virtual function void write(smc_i3c_ibi_item t);
@@ -102,6 +104,9 @@ class smc_i3c_ibi_coverage extends uvm_subscriber #(smc_i3c_ibi_item);
                                        t.ack,
                                        t.threshold_relation_valid,
                                        t.threshold_reached);
+      end
+      IBI_EVT_RECOVERY: begin
+        recovery_cov.sample_recovery(t);
       end
       default: begin
         `uvm_warning("IBI_COV_EVT",

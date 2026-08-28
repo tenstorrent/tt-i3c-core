@@ -16,7 +16,7 @@
 //
 // File        : smc_peripherals_base_vseq.sv
 // Description : Base virtual sequence for SMC peripherals.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-18
 //
 // *****************************************************************************

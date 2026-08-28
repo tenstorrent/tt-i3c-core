@@ -16,7 +16,7 @@
 //
 // File        : axi4lite_reg_adapter.sv
 // Description : UVM register adapter for AXI4-Lite transactions.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-16
 //
 // *****************************************************************************

@@ -16,7 +16,7 @@
 //
 // File        : axi4lite_driver.sv
 // Description : UVM master driver for AXI4-Lite transactions.
-// Authors     : Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-28
 //
 // *****************************************************************************

@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 VNCHIP LABS
+// Authors: Huynh Pham Anh Duy, Thai Hai Dang
+//
+// Standalone OCAH SMC-to-TT-I3C integration top.
+
 `timescale 1ns/1ps
 
 module smc_peripherals_top #(

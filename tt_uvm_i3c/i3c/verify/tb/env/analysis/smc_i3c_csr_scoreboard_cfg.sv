@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_csr_scoreboard_cfg.sv
 // Description : Configuration object for I3C CSR scoreboard.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-16
 //
 // *****************************************************************************

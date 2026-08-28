@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_host_driver.sv
 // Description : UVM driver for I3C host.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-24
 //
 // *****************************************************************************
@@ -40,10 +40,11 @@ class smc_i3c_host_ibi_observation extends uvm_sequence_item;
   endfunction
 endclass : smc_i3c_host_ibi_observation
 
-// Adds testbench-only IBI synchronization and an I3C address-ACK handoff fix
+// Adds testbench-only IBI synchronization and I3C ownership-handoff fixes
 // without modifying the vendored I3C VIP driver. The base host waits for SCL to
-// fall before driving the first data bit; the DUT target releases its ACK
-// during SCL high, so the uncovered interval otherwise appears as a STOP.
+// fall before taking SDA at both address-ACK and read-termination boundaries.
+// The previous owner releases during SCL high, so either uncovered interval
+// otherwise appears as a false STOP on the resolved bus.
 class smc_i3c_host_driver extends i3c_driver;
   `uvm_component_utils(smc_i3c_host_driver)
 
@@ -81,6 +82,31 @@ class smc_i3c_host_driver extends i3c_driver;
                 "Held SDA low across the target-ACK to host-data handoff",
                 UVM_HIGH)
       @(negedge cfg.vif.scl_i);
+    end
+  endtask
+
+  // During an I3C Read, the Target drives the T-bit. For a terminal T-bit of
+  // zero, the Controller must take over the same low level after sampling it
+  // and retain it through the following STOP. Waiting for SCL low is too late:
+  // the Target is permitted to release after the T-bit rising edge, which
+  // would create an unintended STOP while SCL is still high.
+  protected task hold_read_end_handoff(input int unsigned max_data_bytes);
+    // The continuation first emits the Controller's IBI ACK clock.
+    @(posedge cfg.vif.scl_i);
+
+    for (int unsigned byte_index = 0;
+         byte_index < max_data_bytes; byte_index++) begin
+      // Eight data clocks followed by the Target-owned T-bit clock.
+      repeat (9)
+        @(posedge cfg.vif.scl_i);
+      if (cfg.vif.sda_i === 1'b0) begin
+        cfg.vif.host_sda_pp_en = 1'b0;
+        cfg.vif.host_sda_o = 1'b0;
+        `uvm_info("SMC_I3C_READ_END_HANDOFF",
+                  "Held terminal T-bit low through Controller STOP handoff",
+                  UVM_HIGH)
+        return;
+      end
     end
   endtask
 
@@ -128,9 +154,15 @@ class smc_i3c_host_driver extends i3c_driver;
         SMC_I3C_HOST_IBI_DETECTED_EVENT);
       detected_event.trigger();
 
-      // The base driver returns after address arbitration. Continue the
-      // same request through ACK, data reception, and STOP before responding.
+      // The base driver returns after address arbitration. Continue the same
+      // request through ACK, data reception, and STOP before responding. Arm
+      // the Controller handoff in parallel so a terminal Target T-bit cannot
+      // be released into a false physical STOP.
+      fork : read_end_handoff_guard
+        hold_read_end_handoff(req.data_cnt);
+      join_none
       super.drive_host_item(req, transfer_rsp);
+      disable read_end_handoff_guard;
       if (transfer_rsp == null)
         `uvm_fatal("SMC_I3C_IBI_CONTINUE",
                    "IBI continuation returned no response")

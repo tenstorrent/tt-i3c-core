@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+// Derived from the CHIPS Alliance I3C UVM VIP and vendored through
+// the Tenstorrent tt-i3c-core fork.
+
 class i3c_driver extends uvm_driver#(.REQ(i3c_seq_item), .RSP(i3c_seq_item));
   `uvm_component_utils(i3c_driver)
 
@@ -10,6 +14,9 @@ class i3c_driver extends uvm_driver#(.REQ(i3c_seq_item), .RSP(i3c_seq_item));
 
   int scl_spinwait_timeout_ns = 1_000_000; // 1ms
   bit scl_i3c_mode = 0;
+  // Selects the Open-Drain timing class for I3C Address Header/ACK phases.
+  // This does not select the SCL electrical drive mode: an Active Controller
+  // always drives I3C SCL Push-Pull.
   bit scl_i3c_OD = 0;
   bit host_scl_start;
   bit host_scl_stop;
@@ -119,9 +126,15 @@ class i3c_driver extends uvm_driver#(.REQ(i3c_seq_item), .RSP(i3c_seq_item));
       case (bus_state)
         DrvIdle: begin
           if (req.IBI && req.IBI_START) begin
-            cfg.vif.wait_for_host_start();
+            cfg.vif.wait_for_target_ibi_start(cfg.tc.i3c_tc);
             scl_i3c_mode = req.i3c;
             scl_i3c_OD = 1'b1;
+            // The Target owns the SDA-low START request. Before completing
+            // START with SCL low, take over that same low level in Open-Drain
+            // so SDA cannot rise during the Target-to-Controller handoff.
+            cfg.vif.host_sda_pp_en = 1'b0;
+            cfg.vif.host_sda_o = 1'b0;
+            cfg.vif.scl_pp_en = 1'b1;
             host_scl_start = 1;
             bus_state = DrvAddrArbit;
           end else begin
@@ -129,8 +142,21 @@ class i3c_driver extends uvm_driver#(.REQ(i3c_seq_item), .RSP(i3c_seq_item));
           end
         end
         DrvStart: begin
-            `uvm_info(get_full_name(), "Host Start", UVM_MEDIUM)
-          cfg.vif.host_i2c_start(cfg.tc.i2c_tc);
+          `uvm_info(get_full_name(),
+                    $sformatf("Host %s Start", req.i3c ? "I3C" : "I2C"),
+                    UVM_MEDIUM)
+          if (req.i3c) begin
+            // I3C SCL is always actively driven. Preserve the slower START
+            // setup/hold profile for a Broadcast Address Header; normal I3C
+            // headers use the I3C START profile.
+            cfg.vif.scl_pp_en = 1'b1;
+            if (req.addr == 7'h7e)
+              cfg.vif.host_i2c_start(cfg.tc.i2c_tc);
+            else
+              cfg.vif.host_i3c_start(cfg.tc.i3c_tc);
+          end else begin
+            cfg.vif.host_i2c_start(cfg.tc.i2c_tc);
+          end
           scl_i3c_mode = req.i3c;
           scl_i3c_OD = 1'b1;
           host_scl_start = 1;
@@ -211,6 +237,13 @@ class i3c_driver extends uvm_driver#(.REQ(i3c_seq_item), .RSP(i3c_seq_item));
           scl_i3c_mode = req.i3c;
           scl_i3c_OD = 1'b1;
           cfg.vif.host_sda_pp_en = 0;
+          // START is complete when the Controller pulls SCL low. Do not launch
+          // A6 in that same simulation time slot: retain the START-low value
+          // for a short, explicitly configured address-handoff interval.
+          if (req.i3c) begin
+            wait(cfg.vif.scl_i === 1'b0);
+            #(cfg.tc.i3c_tc.tAddrLaunchDelay * 1ns);
+          end
           // Send address and sample SDA line in case of IBI
           for(int i = 6; i>=0; i--) begin
             fork
@@ -449,7 +482,10 @@ class i3c_driver extends uvm_driver#(.REQ(i3c_seq_item), .RSP(i3c_seq_item));
           if (req.IBI && req.IBI_START) begin
             bus_state = DrvStart;
           end else begin
-            cfg.vif.wait_for_host_start();
+            // SMC modification: publish only this Device-driver wait through
+            // the interface's observational readiness flag. No bus behavior,
+            // timing, or state transition is changed.
+            cfg.vif.wait_for_host_start(1'b1);
             bus_state = DrvAddrArbit;
           end
         end
@@ -460,6 +496,13 @@ class i3c_driver extends uvm_driver#(.REQ(i3c_seq_item), .RSP(i3c_seq_item));
         end
         DrvAddrArbit: begin
           bit device_won = req.IBI; // make sure to drive SDA only during active IBI
+          // Whether this Device initiated START or joined an existing START,
+          // launch A6 only after the Controller has completed START with SCL
+          // low and the configured address-handoff interval has elapsed.
+          if (req.i3c) begin
+            wait(cfg.vif.scl_i === 1'b0);
+            #(cfg.tc.i3c_tc.tAddrLaunchDelay * 1ns);
+          end
           // Sample SDA line, possibly drive SDA if IBI in progress
           // Only I3C allows for IBI
           for(int i = 6; i>=0; i--) begin
@@ -467,7 +510,8 @@ class i3c_driver extends uvm_driver#(.REQ(i3c_seq_item), .RSP(i3c_seq_item));
               begin
                 // Check arbitration
                 if (device_won) begin
-                  cfg.vif.device_i3c_send_bit(cfg.tc.i3c_tc, req.IBI_ADDR[i]);
+                  cfg.vif.device_i3c_od_send_bit(cfg.tc.i3c_tc,
+                                                 req.IBI_ADDR[i]);
                   `uvm_info(get_full_name(), $sformatf("Driving device addr[%0d]=%b",
                     i, req.addr[i]), UVM_MEDIUM)
                 end
@@ -482,7 +526,7 @@ class i3c_driver extends uvm_driver#(.REQ(i3c_seq_item), .RSP(i3c_seq_item));
           end
           fork
             if (device_won) begin
-              cfg.vif.device_i3c_send_bit(cfg.tc.i3c_tc, 1);
+              cfg.vif.device_i3c_od_send_bit(cfg.tc.i3c_tc, 1'b1);
             end
             begin
               cfg.vif.sample_target_data(.data(rsp.dir));
@@ -668,13 +712,13 @@ class i3c_driver extends uvm_driver#(.REQ(i3c_seq_item), .RSP(i3c_seq_item));
           // Original scl driver thread
           while(!host_scl_stop) begin
             if (scl_i3c_mode) begin
+              // SDA uses Open-Drain during the arbitrable Address Header and
+              // ACK/NACK, but I3C SCL remains Push-Pull in every I3C phase.
+              cfg.vif.scl_pp_en <= 1'b1;
+              cfg.vif.scl_o <= 1'b0;
               if (scl_i3c_OD) begin
-                cfg.vif.scl_pp_en <= 1'b0;
-                cfg.vif.scl_o <= 1'b0;
                 #(cfg.tc.i3c_tc.tClockLowOD * 1ns);
               end else begin
-                cfg.vif.scl_pp_en <= 1'b1;
-                cfg.vif.scl_o <= 1'b0;
                 #(cfg.tc.i3c_tc.tClockLowPP * 1ns);
               end
               if (host_scl_stop) break;

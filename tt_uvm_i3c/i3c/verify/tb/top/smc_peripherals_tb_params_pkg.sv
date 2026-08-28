@@ -16,7 +16,7 @@
 //
 // File        : smc_peripherals_tb_params_pkg.sv
 // Description : Testbench parameters for the SMC peripheral environment.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-24
 //
 // *****************************************************************************
@@ -28,7 +28,9 @@ package smc_peripherals_tb_params_pkg;
     parameter int TB_DATA_WIDTH       = 32;
     parameter int TB_NUM_I3C_INSTANCES = 1;
     parameter int TB_MAX_I3C_INSTANCES = 6;
-    parameter int TB_MAX_IBI_REQUESTERS = 1;
+    // Verification capacity for one DUT/UVM primary requester plus up to
+    // three additional UVM Targets on the shared open-drain bus.
+    parameter int TB_MAX_IBI_REQUESTERS = 4;
     parameter bit [6:0] TB_DEFAULT_IBI_TARGET_ADDR = 7'h5a;
     parameter int TB_GPIO_WIDTH       = 68;
     parameter int TB_OTP_ADDR_WIDTH   = 16;

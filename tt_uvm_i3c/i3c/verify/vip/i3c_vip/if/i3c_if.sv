@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+// Derived from the CHIPS Alliance I3C UVM VIP and vendored through
+// the Tenstorrent tt-i3c-core fork.
+
 import i3c_vip_types_pkg::*;
 import uvm_pkg::*;
 
@@ -20,6 +24,10 @@ interface i3c_if(
   logic host_sda_pp_en = 1'b0;
   logic device_sda_o = 1'b1;
   logic device_sda_pp_en = 1'b0;
+  // SMC modification: observational state only. It never drives protocol
+  // signals and is qualified so monitor/host callers cannot impersonate a
+  // Device driver that is genuinely blocked waiting for Controller START.
+  bit device_driver_wait_for_start_active = 1'b0;
 
   assign scl_i = scl_io;
   assign sda_i = sda_io;
@@ -90,13 +98,29 @@ interface i3c_if(
     data = cb.sda_i;
   endtask // sample_target_data
 
-  task automatic wait_for_host_start();
+  task automatic wait_for_host_start(input bit observe_device_driver = 1'b0);
+    if (observe_device_driver)
+      device_driver_wait_for_start_active = 1'b1;
     forever begin
       @(negedge sda_i);
       if(!scl_i) continue;
       break;
     end
+    if (observe_device_driver)
+      device_driver_wait_for_start_active = 1'b0;
   endtask : wait_for_host_start
+
+  // A Target initiates an IBI by pulling SDA low while the Controller keeps
+  // SCL high. Preserve the configured START hold interval before allowing the
+  // Host driver to begin address-arbitration clocks.
+  task automatic wait_for_target_ibi_start(ref i3c_timing_t tc);
+    wait_for_host_start();
+    #(tc.tHoldStart * 1ns);
+    if ((scl_i !== 1'b1) || (sda_i !== 1'b0))
+      `uvm_fatal(msg_id,
+                 $sformatf("Target IBI START was not held stable for tHoldStart=%0d ns: SCL/SDA=%b/%b",
+                           tc.tHoldStart, scl_i, sda_i))
+  endtask : wait_for_target_ibi_start
 
   task automatic get_bit_data(string src = "host",
                               output bit bit_o);
@@ -223,25 +247,14 @@ interface i3c_if(
 
 
   task automatic wait_for_host_ack_or_nack(output bit   ack_r);
-    bit ack = 1'b0;
-    bit nack = 1'b0;
-    fork
-      begin : iso_fork
-        fork
-          begin
-            wait_for_host_ack();
-            ack = 1'b1;
-          end
-          begin
-            wait_for_host_nack();
-            nack = 1'b1;
-          end
-        join_any
-        disable fork;
-      end : iso_fork
-    join
+    // The caller enters immediately before the ACK/NACK bit. Sample exactly
+    // that next SCL rising edge instead of racing two level-search loops. The
+    // old loops could let the NACK branch skip the current low ACK bit and
+    // consume a later high data bit, which reported a false NACK for the
+    // winning Target during concurrent IBI arbitration.
+    p_edge_scl();
+    ack_r = (cb.sda_i === 1'b0);
     wait(scl_io == 0);
-    ack_r = ack && !nack;
   endtask: wait_for_host_ack_or_nack
 
   task automatic time_check(input int delay, input bit exp_value, ref check_wire, input string msg);

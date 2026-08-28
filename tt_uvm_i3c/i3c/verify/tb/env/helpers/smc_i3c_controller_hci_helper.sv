@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_controller_hci_helper.sv
 // Description : Helper API for I3C controller HCI.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-25
 //
 // *****************************************************************************
@@ -148,7 +148,13 @@ class smc_i3c_controller_hci_helper #(
       input bit [6:0] static_addr,
       input bit ibi_reject,
       input bit ibi_payload,
-      input uvm_sequence_base parent_seq = null);
+      input uvm_sequence_base parent_seq = null,
+      // HCI compares (MDB & AUTOCMD_MASK) against AUTOCMD_VALUE. A zero
+      // mask/value pair matches every MDB, so ordinary IBI tests explicitly
+      // use value 1 with mask 0 to disable unintended Auto-Commands.
+      input bit [7:0] autocmd_mask = 8'h00,
+      input bit [7:0] autocmd_value = 8'h01,
+      input bit [2:0] autocmd_mode = 3'b000);
     bit [63:0] dat_entry;
     bit [63:0] dat_readback;
     uvm_reg_addr_t entry_address;
@@ -170,6 +176,9 @@ class smc_i3c_controller_hci_helper #(
     dat_entry[13] = ibi_reject;
     dat_entry[23:16] = {1'b0, dynamic_addr};
     dat_entry[31] = 1'b0; // I3C device, not legacy I2C.
+    dat_entry[39:32] = autocmd_mask;
+    dat_entry[47:40] = autocmd_value;
+    dat_entry[50:48] = autocmd_mode;
 
     entry_address =
       ral_model.DAT.m_mem.get_address(device_index, ral_model.default_map);
@@ -207,12 +216,21 @@ class smc_i3c_controller_hci_helper #(
     cfg.ibi_controller_dat_valid_by_addr[dynamic_addr] = 1'b1;
     cfg.ibi_controller_dat_reject_by_addr[dynamic_addr] = ibi_reject;
     cfg.ibi_controller_dat_payload_by_addr[dynamic_addr] = ibi_payload;
+    cfg.ibi_controller_dat_autocmd_mask_by_addr[dynamic_addr] =
+      autocmd_mask;
+    cfg.ibi_controller_dat_autocmd_value_by_addr[dynamic_addr] =
+      autocmd_value;
+    cfg.ibi_controller_dat_autocmd_mode_by_addr[dynamic_addr] =
+      autocmd_mode;
   endtask
 
   virtual task initialize_controller_ibi(
       input bit [6:0] target_addr,
       input int unsigned device_index,
-      input uvm_sequence_base parent_seq = null);
+      input uvm_sequence_base parent_seq = null,
+      input bit [7:0] autocmd_mask = 8'h00,
+      input bit [7:0] autocmd_value = 8'h01,
+      input bit [2:0] autocmd_mode = 3'b000);
     bit [DATA_WIDTH-1:0] saved_stby_control;
     bit [DATA_WIDTH-1:0] saved_pio_control;
     bit [DATA_WIDTH-1:0] saved_host_control;
@@ -231,7 +249,8 @@ class smc_i3c_controller_hci_helper #(
                  "Failed to configure active-controller timing and PIO mode")
 
     program_dat_entry(device_index, target_addr, '0,
-                      1'b0, 1'b1, parent_seq);
+                      1'b0, 1'b1, parent_seq,
+                      autocmd_mask, autocmd_value, autocmd_mode);
 
     update_rw_field(
       ral_model.PIOControl.QUEUE_THLD_CTRL.IBI_STATUS_THLD,
@@ -303,6 +322,70 @@ class smc_i3c_controller_hci_helper #(
                    descriptor[63:32],
                    "issue DAT private write high",
                    parent_seq);
+  endtask
+
+  virtual task issue_dat_private_read(
+      input int unsigned device_index,
+      input int unsigned byte_count,
+      input bit [3:0] transaction_id,
+      input uvm_sequence_base parent_seq = null);
+    bit [63:0] descriptor;
+
+    if (device_index >= ral_model.DAT.m_mem.get_size())
+      `uvm_fatal("I3C_HCI_CMD_INDEX",
+                 $sformatf("Command DAT index %0d exceeds table size %0d",
+                           device_index, ral_model.DAT.m_mem.get_size()))
+    if ((byte_count == 0) || (byte_count > 16'hffff))
+      `uvm_fatal("I3C_HCI_READ_LENGTH",
+                 $sformatf("Private Read byte count must be 1..65535, got %0d",
+                           byte_count))
+
+    // HCI Regular Transfer through DAT. WROC is clear because these IBI tests
+    // verify the read on the bus and drain RX_DATA_PORT directly; leaving a
+    // response descriptor behind would contaminate later queue checks.
+    descriptor = '0;
+    descriptor[63:48] = byte_count[15:0];
+    descriptor[31] = 1'b1; // TOC: STOP after the Private Read.
+    descriptor[30] = 1'b0; // WROC: no response descriptor requested.
+    descriptor[29] = 1'b1; // RNW: Private Read.
+    descriptor[28:26] = 3'b000; // SDR0.
+    descriptor[20:16] = device_index[4:0];
+    descriptor[15] = 1'b0; // Private transfer, not CCC.
+    descriptor[6:3] = transaction_id;
+    descriptor[2:0] = 3'b000; // Regular transfer, DAT format.
+    write_register(ral_model.PIOControl.COMMAND_PORT,
+                   descriptor[31:0],
+                   "issue DAT private read low",
+                   parent_seq);
+    write_register(ral_model.PIOControl.COMMAND_PORT,
+                   descriptor[63:32],
+                   "issue DAT private read high",
+                   parent_seq);
+  endtask
+
+  virtual task read_rx_data(
+      input int unsigned byte_count,
+      output byte unsigned data[$],
+      input uvm_sequence_base parent_seq = null);
+    bit [DATA_WIDTH-1:0] word;
+    int unsigned word_count;
+
+    if (byte_count == 0)
+      `uvm_fatal("I3C_HCI_RX_LENGTH",
+                 "RX data read requires at least one byte")
+    word_count = (byte_count + (DATA_WIDTH/8) - 1) / (DATA_WIDTH/8);
+    data.delete();
+    for (int unsigned word_index = 0;
+         word_index < word_count; word_index++) begin
+      read_register(ral_model.PIOControl.RX_DATA_PORT, word,
+                    $sformatf("read HCI RX data word %0d", word_index),
+                    parent_seq);
+      for (int unsigned byte_index = 0;
+           byte_index < (DATA_WIDTH/8); byte_index++) begin
+        if (data.size() < byte_count)
+          data.push_back(word[8*byte_index +: 8]);
+      end
+    end
   endtask
 
   virtual task read_ibi_status(

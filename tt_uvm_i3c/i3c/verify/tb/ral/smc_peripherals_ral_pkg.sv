@@ -16,7 +16,7 @@
 //
 // File        : smc_peripherals_ral_pkg.sv
 // Description : UVM package for peripherals RAL.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-18
 //
 // *****************************************************************************

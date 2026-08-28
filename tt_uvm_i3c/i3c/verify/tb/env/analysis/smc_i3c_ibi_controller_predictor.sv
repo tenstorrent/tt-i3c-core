@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_ibi_controller_predictor.sv
 // Description : Reference predictor for I3C IBI controller.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-25
 //
 // *****************************************************************************
@@ -54,6 +54,7 @@ class smc_i3c_ibi_controller_predictor extends uvm_component;
   virtual function void write_ibi_ctrl_predictor_target(
       smc_i3c_target_ibi_observation observation);
     smc_i3c_ibi_expected_item expected;
+    bit autocmd_match;
 
     if (observation == null)
       return;
@@ -71,20 +72,54 @@ class smc_i3c_ibi_controller_predictor extends uvm_component;
     expected.payload_policy = !expected.dat_match ? 2'd0 :
       (cfg.ibi_controller_dat_payload_by_addr[observation.addr] ?
          2'd2 : 2'd1);
+    // DAT IBI_PAYLOAD governs permission to transfer an MDB/additional data
+    // after an accepted IBI header.  A Target that advertises BCR[2]=0 sends
+    // neither, so a matching non-rejecting DAT entry must still accept the
+    // legal address-only request.  Keep the payload permission mandatory for
+    // all existing MDB-bearing scenarios.
     expected.ibi_enabled =
       expected.dat_match &&
       !cfg.ibi_controller_dat_reject_by_addr[observation.addr] &&
-      cfg.ibi_controller_dat_payload_by_addr[observation.addr];
-    expected.expected_ack = expected.ibi_enabled;
+      (cfg.ibi_controller_dat_payload_by_addr[observation.addr] ||
+       !cfg.ibi_bcr[SMC_I3C_BCR_MDB_CAPABLE_BIT]);
+    expected.expected_ack = expected.ibi_enabled &&
+      !cfg.ibi_controller_fifo_full_expected_nack;
+    // Snapshot controls at the bus attempt. Queue records may be drained and
+    // correlated only after software changes the interrupt mask.
+    expected.irq_enabled_at_attempt =
+      cfg.ral_model.PIOControl.PIO_INTR_SIGNAL_ENABLE.
+        IBI_STATUS_THLD_SIGNAL_EN.get_mirrored_value() != 0;
+    expected.irq_asserted_at_attempt = (cfg.vif.i3c_irq === 1'b1);
+    expected.queue_full_reject =
+      cfg.ibi_controller_fifo_full_expected_nack;
     expected.expected_terminal_status = expected.expected_ack ?
       IBI_STATUS_SUCCESS : IBI_STATUS_FAILURE_NACK;
     expected.mdb_present = observation.data.size() != 0;
+    expected.expected_status_type = 3'b000;
     if (observation.data.size() != 0) begin
       expected.mdb = observation.data[0];
       expected.payload_len = observation.data.size() - 1;
       for (int unsigned index = 1;
            index < observation.data.size(); index++)
         expected.payload.push_back(observation.data[index]);
+
+      autocmd_match = expected.dat_match && expected.expected_ack &&
+        cfg.ibi_controller_dat_autocmd_mask_by_addr.exists(observation.addr) &&
+        cfg.ibi_controller_dat_autocmd_value_by_addr.exists(observation.addr) &&
+        ((expected.mdb &
+          cfg.ibi_controller_dat_autocmd_mask_by_addr[observation.addr]) ==
+         cfg.ibi_controller_dat_autocmd_value_by_addr[observation.addr]);
+      if (autocmd_match) begin
+        // AUTOCMD_DATA_RPT is fixed to coalesced reporting in the pinned HCI:
+        // the Private Read bytes follow the IBI MDB/additional data in the
+        // same status record, whose status type is AutoCmd IBI (3'b100).
+        expected.expected_status_type = 3'b100;
+        foreach (cfg.ibi_controller_autocmd_expected_data[index])
+          expected.payload.push_back(
+            cfg.ibi_controller_autocmd_expected_data[index]);
+        expected.payload_len +=
+          cfg.ibi_controller_autocmd_expected_data.size();
+      end
     end
     expected_port.write(expected);
     cfg.ibi_controller_expected_events++;

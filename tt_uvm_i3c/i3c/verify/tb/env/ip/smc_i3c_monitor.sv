@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_monitor.sv
 // Description : UVM monitor for I3C.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-24
 //
 // *****************************************************************************

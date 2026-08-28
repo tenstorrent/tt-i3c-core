@@ -1,4 +1,4 @@
-# Pinned upstream sources used by the standalone TT UVM I3C environment.
+# Pinned upstream sources used by the OCAH SMC I3C integration.
 I3C_SOURCE_PINS     := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../../sim/project/i3c_source_pins.mk)
 include $(I3C_SOURCE_PINS)
 

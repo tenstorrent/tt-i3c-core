@@ -1,27 +1,4 @@
 #######################################################################
-# *****************************************************************************
-# SPDX-License-Identifier: Apache-2.0
-# Copyright (c) 2026 VNCHIP LABS
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     https://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-# File        : Makefile
-# Description : TT UVM I3C simulation support file.
-# Authors     : Duy Huynh, Dang Thai
-# Date        : 2026-08-11
-#
-# *****************************************************************************
-
 # Company      : VNCHIP
 # Project      : LPIOC
 # IP           : smc_peripherals
@@ -34,10 +11,10 @@
 # Interfaces   : N/A
 # Dependencies : GNU Make, Synopsys VCS, Verdi
 # Parameters   : N/A
-# Integration  : Execute from the i3c/sim directory.
+# Integration  : Execute from the smc_peripherals/sim directory.
 # Notes        : Optimized for compilation speed and UVM package resolution.
 # Revision     :
-# Author       : Thai Hai Dang
+# Authors      : Huynh Pham Anh Duy, Thai Hai Dang
 # Create Date  : 2026-03-02
 # Last Modified: 2026-03-02
 #######################################################################
@@ -82,14 +59,16 @@ FSDB_PLI_DIR ?= $(VERDI_HOME)/share/PLI/VCS/LINUX64
 # UVM Library Selection
 # ==============================================================================
 # USE_EXT_UVM=0: use the simulator built-in UVM library through VCS -ntb_opts uvm.
-# USE_EXT_UVM=1: use the bundled Accellera UVM library by default.
-# EXT_UVM_HOME can override it with another UVM kit root or src directory.
+# USE_EXT_UVM=1: use an external Accellera UVM library from EXT_UVM_HOME.
+# EXT_UVM_HOME can point to the UVM kit root or directly to its src directory.
 #
-# The bundled library is located relative to this Makefile so the package can
-# be moved without changing an absolute path.
-BUNDLED_UVM_HOME := $(abspath $(dir $(firstword $(MAKEFILE_LIST)))/../../third_party/uvm-core-2020.3.1)
+# Example external UVM path:
+#   EXT_UVM_HOME=/path/to/uvm-core-2020.3.1
+#
+# Default is 1: use the bundled Accellera UVM 2020.3.1 library.
+# Set USE_EXT_UVM=0 only when intentionally using the simulator-provided UVM.
 USE_EXT_UVM     ?= 1
-EXT_UVM_HOME    ?= $(if $(strip $(UVM_HOME)),$(UVM_HOME),$(BUNDLED_UVM_HOME))
+EXT_UVM_HOME    ?= $(ROOT_DIR)/../third_party/uvm-core-2020.3.1
 EXT_UVM_USE_DPI ?= 1
 
 # VCS option required for UVM 1800.2-2020.3.1.
@@ -165,7 +144,7 @@ SIM_MAKEFILE_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
 MK_DIR      ?= $(SIM_MAKEFILE_DIR)/mk
 GEN_MK_OPTS ?= --mk
-GEN_MK_SCRIPT := $(SIM_MAKEFILE_DIR)/vcs_run_script/gen_mk_files.sh
+GEN_MK_SCRIPT := $(SIM_MAKEFILE_DIR)/scripts/gen_mk_files.sh
 BUILD_DIR   ?= $(SIM_MAKEFILE_DIR)/out
 ARTIFACT_ROOT ?= $(BUILD_DIR)
 RUN_DIR     ?= $(BUILD_DIR)
@@ -282,7 +261,7 @@ RUN_OPTS    := +UVM_TESTNAME=$(TEST_NAME) \
 # ==============================================================================
 # 7. Execution Targets
 # ==============================================================================
-.PHONY: all comp sim run clean help wave gen-mk \
+.PHONY: all comp sim run clean help wave gen-mk reuse-check i3c-reuse-check \
         check-uvm-config check-dut-mode check-i3c-source check-vcs-version \
         check-fsdb-config
 
@@ -435,10 +414,16 @@ check-vcs-version:
 		echo "[INFO] DUT_MODE=stub: I3C VCS version gate skipped"; \
 	fi
 
+i3c-reuse-check:
+	@bash $(SCRIPTS_DIR)/check_i3c_reuse.sh
+
 sim: comp run
 
 gen-mk:
 	@bash $(GEN_MK_SCRIPT) $(GEN_MK_OPTS) --root $(GEN_ROOT)
+
+reuse-check:
+	@bash $(SIM_MAKEFILE_DIR)/scripts/check_core_vseq_reuse.sh
 
 wave:
 	@echo "--- [DEBUG] Opening Verdi ---"
@@ -484,12 +469,13 @@ help:
 	@echo "  make run                          : Run simulation (requires compiled simv)"
 	@echo "  make wave                         : Open Waveform (Verdi)"
 	@echo "  make check-uvm-config             : Print and validate current UVM library selection"
+	@echo "  make reuse-check                  : Check blackbox-safe vseqs have no direct APB/RAL/HDL dependency"
 	@echo "  make clean                        : Lightweight local clean for direct make usage"
 	@echo "  make help                         : Print this help message"
 	@echo ""
 	@echo " Script-owned flows:"
-	@echo "  ./run.sh coverage ...             : Run and merge coverage"
-	@echo "  ./run.sh view ...                 : List or open waveforms"
+	@echo "  ./run.sh cov_rep                  : Merge/generate coverage report"
+	@echo "  ./run.sh view cov_view            : View merged coverage report"
 	@echo "  ./run.sh clean ...                : Manifest-aware clean helpers"
 	@echo ""
 	@echo " Execution Parameters (Command Line Overrides):"
@@ -506,10 +492,10 @@ help:
 	@echo "  CORE=<number>                     : Number of compile cores (Default: 4)"
 	@echo "  RUN_CORE=<number>                 : Number of run cores per simulation job (Default: 1)"
 	@echo "  GEN_MK_OPTS=<opts>                : Generator options for gen-mk (Default: --mk)"
-	@echo "  See ../README.md or sim/filelists/test.f for the current test list"
+	@echo "  See ../../docs/README.md or sim/filelists/test.f for the current test list"
 	@echo ""
 	@echo " Examples:"
 	@echo "  make sim"
-	@echo "  make sim USE_EXT_UVM=1"
-	@echo "  make sim USE_EXT_UVM=1 EXT_UVM_HOME=/alternate/uvm EXT_UVM_USE_DPI=0"
+	@echo "  make sim USE_EXT_UVM=1 EXT_UVM_HOME=/path/to/uvm-core-2020.3.1"
+	@echo "  make sim USE_EXT_UVM=1 EXT_UVM_HOME=/path/to/uvm-core-2020.3.1 EXT_UVM_USE_DPI=0"
 	@echo "======================================================================"

@@ -16,8 +16,8 @@
 //
 // File        : tb_smc_peripherals_top.sv
 // Description : Top-level UVM testbench for SMC peripherals.
-// Authors     : Duy Huynh, Dang Thai
-// Date        : 2026-07-29
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
+// Date        : 2026-08-06
 //
 // *****************************************************************************
 
@@ -61,6 +61,11 @@ module tb_smc_peripherals_top;
         .i3c_sda (i3c_sda_bus)
     );
 
+    initial begin : i3c_access_policy_config
+        if ($test$plusargs("SMC_I3C_DENY_ACCESS"))
+            u_smc_peripherals_if.i3c_access_allow = 1'b0;
+    end
+
 `ifdef SMC_USE_I3C_RTL
     i3c_if u_i3c_if (
         .clk_i  (clk),
@@ -68,7 +73,19 @@ module tb_smc_peripherals_top;
         .scl_io (i3c_scl_bus),
         .sda_io (i3c_sda_bus)
     );
-    i3c_if u_i3c_secondary_if (
+    i3c_if u_i3c_target_if_1 (
+        .clk_i  (clk),
+        .rst_ni (rst_n),
+        .scl_io (i3c_scl_bus),
+        .sda_io (i3c_sda_bus)
+    );
+    i3c_if u_i3c_target_if_2 (
+        .clk_i  (clk),
+        .rst_ni (rst_n),
+        .scl_io (i3c_scl_bus),
+        .sda_io (i3c_sda_bus)
+    );
+    i3c_if u_i3c_target_if_3 (
         .clk_i  (clk),
         .rst_ni (rst_n),
         .scl_io (i3c_scl_bus),
@@ -163,7 +180,7 @@ module tb_smc_peripherals_top;
     ) u_dut (
         .clk, .rst_n,
         .i3c_enable_i(1'b1),
-        .i3c_access_allow_i(1'b1),
+        .i3c_access_allow_i(u_smc_peripherals_if.i3c_access_allow),
         .awaddr(u_axi4lite_if.awaddr), .awvalid(u_axi4lite_if.awvalid),
         .awready(u_axi4lite_if.awready), .wdata(u_axi4lite_if.wdata),
         .wstrb(u_axi4lite_if.wstrb), .wvalid(u_axi4lite_if.wvalid),
@@ -186,8 +203,12 @@ module tb_smc_peripherals_top;
     );
     assign u_smc_peripherals_if.dut_present = 1'b1;
 
+`ifndef SMC_I3C_IBI_COVERAGE_ONLY
+    // AXI boundary protocol ownership is retained for non-coverage debug and
+    // its owning regression, but is outside the IBI coverage closure build.
     smc_i3c_boundary_sva #(TB_ADDR_WIDTH, TB_DATA_WIDTH) u_i3c_boundary_sva (
-        .clk, .rst_n, .access_allow(1'b1),
+        .clk, .rst_n,
+        .access_allow(u_smc_peripherals_if.i3c_access_allow),
         .awaddr(u_axi4lite_if.awaddr), .awvalid(u_axi4lite_if.awvalid),
         .awready(u_axi4lite_if.awready), .wdata(u_axi4lite_if.wdata),
         .wstrb(u_axi4lite_if.wstrb), .wvalid(u_axi4lite_if.wvalid),
@@ -198,6 +219,7 @@ module tb_smc_peripherals_top;
         .rresp(u_axi4lite_if.rresp), .rvalid(u_axi4lite_if.rvalid),
         .rready(u_axi4lite_if.rready)
     );
+`endif
     smc_i3c_ibi_bus_sva u_i3c_ibi_bus_sva (
         .clk,
         .rst_n,
@@ -212,6 +234,7 @@ module tb_smc_peripherals_top;
         .clk,
         .rst_n,
         .enable(ibi_controller_sva_enable),
+        .suppress(u_smc_peripherals_if.i3c_controller_ibi_sva_suppress),
         .scl(i3c_scl_bus),
         .sda(i3c_sda_bus),
         .target_addr(u_smc_peripherals_if.i3c_controller_expected_addr),
@@ -285,13 +308,38 @@ module tb_smc_peripherals_top;
           u_smc_peripherals_if.i3c_sva_queue_response_context_valid),
         .queue_response_ack(
           u_smc_peripherals_if.i3c_sva_queue_response_ack),
-        .queue_record_kind(
-          u_smc_peripherals_if.i3c_sva_queue_record_kind),
         .queue_state(u_smc_peripherals_if.i3c_sva_queue_state),
         .queue_status_source(
           u_smc_peripherals_if.i3c_sva_queue_status_source),
         .queue_irq_state(
           u_smc_peripherals_if.i3c_sva_queue_irq_state),
+        .queue_role(u_smc_peripherals_if.i3c_sva_queue_role),
+        .queue_irq_enabled(
+          u_smc_peripherals_if.i3c_sva_queue_irq_enabled),
+        .arbitration_seq(
+          u_smc_peripherals_if.i3c_sva_arbitration_seq),
+        .requester_active(
+          u_smc_peripherals_if.i3c_sva_requester_active),
+        .requester_winner(
+          u_smc_peripherals_if.i3c_sva_requester_winner),
+        .requester_released(
+          u_smc_peripherals_if.i3c_sva_requester_released),
+        .recovery_seq(u_smc_peripherals_if.i3c_sva_recovery_seq),
+        .recovery_role(u_smc_peripherals_if.i3c_sva_recovery_role),
+        .recovery_cause(u_smc_peripherals_if.i3c_sva_recovery_cause),
+        .recovery_result(u_smc_peripherals_if.i3c_sva_recovery_result),
+        .recovery_trigger_seen(
+          u_smc_peripherals_if.i3c_sva_recovery_trigger_seen),
+        .recovery_queue_empty(
+          u_smc_peripherals_if.i3c_sva_recovery_queue_empty),
+        .recovery_irq_low(
+          u_smc_peripherals_if.i3c_sva_recovery_irq_low),
+        .recovery_bus_idle(
+          u_smc_peripherals_if.i3c_sva_recovery_bus_idle),
+        .recovery_followup_expected(
+          u_smc_peripherals_if.i3c_sva_recovery_followup_expected),
+        .recovery_forward_progress(
+          u_smc_peripherals_if.i3c_sva_recovery_forward_progress),
         .scl(i3c_scl_bus),
         .sda(i3c_sda_bus),
         .timing_check_enable(
@@ -397,8 +445,18 @@ module tb_smc_peripherals_top;
         uvm_pkg::uvm_config_db#(virtual i3c_if)::set(
             null, "uvm_test_top", "smc_i3c_vif", u_i3c_if);
         uvm_pkg::uvm_config_db#(virtual i3c_if)::set(
+            null, "uvm_test_top", "smc_i3c_target_vif_1",
+            u_i3c_target_if_1);
+        uvm_pkg::uvm_config_db#(virtual i3c_if)::set(
+            null, "uvm_test_top", "smc_i3c_target_vif_2",
+            u_i3c_target_if_2);
+        uvm_pkg::uvm_config_db#(virtual i3c_if)::set(
+            null, "uvm_test_top", "smc_i3c_target_vif_3",
+            u_i3c_target_if_3);
+        // Compatibility key used by the existing two-requester tests.
+        uvm_pkg::uvm_config_db#(virtual i3c_if)::set(
             null, "uvm_test_top", "smc_i3c_secondary_vif",
-            u_i3c_secondary_if);
+            u_i3c_target_if_1);
 `endif
 
         uvm_pkg::run_test();

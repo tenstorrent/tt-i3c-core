@@ -16,8 +16,8 @@
 //
 // File        : smc_peripherals_env.sv
 // Description : Top-level UVM environment for SMC peripherals.
-// Authors     : Duy Huynh, Dang Thai
-// Date        : 2026-07-25
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
+// Date        : 2026-08-06
 //
 // *****************************************************************************
 
@@ -30,18 +30,21 @@ class smc_peripherals_env extends uvm_env;
     smc_i3c_csr_helper #(TB_ADDR_WIDTH, TB_DATA_WIDTH) i3c_csr_helper;
     smc_peripherals_scoreboard #(TB_ADDR_WIDTH, TB_DATA_WIDTH) scoreboard;
     axi4lite_agent #(TB_ADDR_WIDTH, TB_DATA_WIDTH) bus_agt;  // P6: shared VIP agent
-    smc_i3c_integration_coverage i3c_cov;
+    smc_i3c_ibi_blocked_coverage i3c_ibi_blocked_cov;
 `ifdef SMC_USE_I3C_RTL
     i3c_agent i3c_agt;
+    i3c_agent i3c_target_agt[TB_MAX_IBI_REQUESTERS];
     i3c_agent i3c_agt_secondary;
 `ifdef SMC_USE_I3C_RAL
     smc_i3c_ibi_predictor ibi_predictor;
     smc_i3c_ibi_observer ibi_observer;
     smc_i3c_ibi_coverage ibi_functional_cov;
     smc_i3c_ibi_sva_probe ibi_sva_probe;
+    smc_i3c_ibi_recovery_checker ibi_recovery_checker;
     smc_i3c_ibi_scoreboard ibi_scoreboard;
     smc_i3c_host_driver ibi_host_driver;
     smc_i3c_target_driver ibi_target_driver;
+    smc_i3c_target_driver ibi_target_driver_by_slot[TB_MAX_IBI_REQUESTERS];
     smc_i3c_target_driver ibi_target_driver_secondary;
     smc_i3c_ibi_controller_predictor ibi_controller_predictor;
     smc_i3c_ibi_controller_observer ibi_controller_observer;
@@ -77,6 +80,9 @@ class smc_peripherals_env extends uvm_env;
         vseq_ctx.cfg = cfg;
         vseq_ctx.services = services;
         vseq_ctx.i3c_csr_helper = i3c_csr_helper;
+        i3c_ibi_blocked_cov = smc_i3c_ibi_blocked_coverage::type_id::create(
+            "i3c_ibi_blocked_cov");
+        vseq_ctx.i3c_ibi_blocked_cov = i3c_ibi_blocked_cov;
 
 `ifdef SMC_USE_I3C_RAL
         if (cfg.has_rtl && cfg.has_ral) begin
@@ -124,6 +130,16 @@ class smc_peripherals_env extends uvm_env;
 
 `ifdef SMC_USE_I3C_RTL
         if (cfg.has_i3c_agent) begin
+            string agent_name;
+
+            cfg.sync_ibi_target_slots();
+            if ((cfg.ibi_controller_target_count < 1) ||
+                (cfg.ibi_controller_target_count >
+                 TB_MAX_IBI_REQUESTERS))
+                `uvm_fatal("SMC_I3C_TARGET_COUNT",
+                           $sformatf("IBI requester count must be 1..%0d, got %0d",
+                                     TB_MAX_IBI_REQUESTERS,
+                                     cfg.ibi_controller_target_count))
             if (cfg.i3c_vif == null)
                 `uvm_fatal("SMC_I3C_VIF", "IBI test requested the I3C agent without an i3c_if")
             if (cfg.i3c_cfg == null)
@@ -141,32 +157,53 @@ class smc_peripherals_env extends uvm_env;
             cfg.i3c_cfg.i3c_target0.bcr = cfg.ibi_bcr;
             uvm_config_db#(i3c_agent_cfg)::set(this, "i3c_agt", "cfg", cfg.i3c_cfg);
             uvm_config_db#(virtual i3c_if)::set(this, "i3c_agt", "vif", cfg.i3c_vif);
-            i3c_agt = i3c_agent::type_id::create("i3c_agt", this);
-            if (cfg.ibi_controller_target_count > 1) begin
-                if (cfg.i3c_secondary_vif == null)
-                    `uvm_fatal("SMC_I3C_SECONDARY_VIF",
-                               "Multi-target IBI test requires a secondary i3c_if")
-                cfg.i3c_secondary_cfg =
-                  i3c_agent_cfg::type_id::create("i3c_secondary_cfg");
-                cfg.i3c_secondary_cfg.is_active = 1'b1;
-                cfg.i3c_secondary_cfg.has_driver = 1'b1;
-                cfg.i3c_secondary_cfg.en_monitor = 1'b0;
-                cfg.i3c_secondary_cfg.if_mode = Device;
-                cfg.i3c_secondary_cfg.vif = cfg.i3c_secondary_vif;
-                cfg.i3c_secondary_cfg.i3c_target0.dynamic_addr =
-                  cfg.ibi_secondary_target_addr;
-                cfg.i3c_secondary_cfg.i3c_target0.dynamic_addr_valid = 1'b1;
-                cfg.i3c_secondary_cfg.i3c_target0.IBI_enabled = 1'b1;
-                cfg.i3c_secondary_cfg.i3c_target0.bcr = cfg.ibi_bcr;
-                uvm_config_db#(i3c_agent_cfg)::set(
-                  this, "i3c_agt_secondary", "cfg",
-                  cfg.i3c_secondary_cfg);
-                uvm_config_db#(virtual i3c_if)::set(
-                  this, "i3c_agt_secondary", "vif",
-                  cfg.i3c_secondary_vif);
-                i3c_agt_secondary =
-                  i3c_agent::type_id::create("i3c_agt_secondary", this);
+            if (cfg.ibi_dut_role == SMC_I3C_IBI_DUT_CONTROLLER) begin
+                // The primary Device-mode agent is Target slot zero. Give its
+                // specialized driver the same slot identity and shared
+                // telemetry object used by the auxiliary Target agents.
+                uvm_config_db#(int unsigned)::set(
+                  this, "i3c_agt.driver", "smc_i3c_target_slot", 0);
+                uvm_config_db#(smc_peripherals_env_cfg)::set(
+                  this, "i3c_agt.driver", "smc_peripherals_env_cfg", cfg);
             end
+            i3c_agt = i3c_agent::type_id::create("i3c_agt", this);
+            i3c_target_agt[0] = i3c_agt;
+            for (int unsigned slot = 1;
+                 slot < cfg.ibi_controller_target_count; slot++) begin
+                agent_name = (slot == 1) ? "i3c_agt_secondary" :
+                  $sformatf("i3c_agt_target_%0d", slot);
+                if (cfg.i3c_target_vif[slot] == null)
+                    `uvm_fatal("SMC_I3C_TARGET_VIF",
+                               $sformatf("Multi-target IBI test requires i3c_if slot %0d",
+                                         slot))
+                cfg.i3c_target_cfg[slot] =
+                  i3c_agent_cfg::type_id::create(
+                    $sformatf("i3c_target_cfg_%0d", slot));
+                cfg.i3c_target_cfg[slot].is_active = 1'b1;
+                cfg.i3c_target_cfg[slot].has_driver = 1'b1;
+                cfg.i3c_target_cfg[slot].en_monitor = 1'b0;
+                cfg.i3c_target_cfg[slot].if_mode = Device;
+                cfg.i3c_target_cfg[slot].vif = cfg.i3c_target_vif[slot];
+                cfg.i3c_target_cfg[slot].i3c_target0.dynamic_addr =
+                  cfg.ibi_target_addr_by_slot[slot];
+                cfg.i3c_target_cfg[slot].i3c_target0.dynamic_addr_valid = 1'b1;
+                cfg.i3c_target_cfg[slot].i3c_target0.IBI_enabled = 1'b1;
+                cfg.i3c_target_cfg[slot].i3c_target0.bcr = cfg.ibi_bcr;
+                uvm_config_db#(i3c_agent_cfg)::set(
+                  this, agent_name, "cfg", cfg.i3c_target_cfg[slot]);
+                uvm_config_db#(virtual i3c_if)::set(
+                  this, agent_name, "vif", cfg.i3c_target_vif[slot]);
+                uvm_config_db#(int unsigned)::set(
+                  this, {agent_name, ".driver"},
+                  "smc_i3c_target_slot", slot);
+                uvm_config_db#(smc_peripherals_env_cfg)::set(
+                  this, {agent_name, ".driver"},
+                  "smc_peripherals_env_cfg", cfg);
+                i3c_target_agt[slot] =
+                  i3c_agent::type_id::create(agent_name, this);
+            end
+            i3c_agt_secondary = i3c_target_agt[1];
+            cfg.i3c_secondary_cfg = cfg.i3c_target_cfg[1];
         end
 `ifdef SMC_USE_I3C_RAL
         if (cfg.has_ibi_scoreboard) begin
@@ -181,6 +218,16 @@ class smc_peripherals_env extends uvm_env;
             ibi_sva_probe = smc_i3c_ibi_sva_probe::type_id::create(
                 "ibi_sva_probe", this);
             ibi_sva_probe.vif = cfg.vif;
+        end
+        if (cfg.has_ibi_recovery_checker) begin
+            if (!cfg.has_ibi_coverage)
+                `uvm_fatal("IBI_RECOVERY_COV",
+                           "Recovery checker requires IBI coverage/SVA consumers")
+            ibi_recovery_checker =
+              smc_i3c_ibi_recovery_checker::type_id::create(
+                "ibi_recovery_checker", this);
+            ibi_recovery_checker.cfg = cfg;
+            vseq_ctx.i3c_ibi_recovery_checker = ibi_recovery_checker;
         end
         if (cfg.has_ibi_scoreboard) begin
             if (!cfg.has_i3c_agent)
@@ -228,8 +275,6 @@ class smc_peripherals_env extends uvm_env;
             )::type_id::create("scoreboard", this);
             scoreboard.env_cfg = cfg;
         end
-        if (cfg.has_rtl)
-            i3c_cov = smc_i3c_integration_coverage::type_id::create("i3c_cov", this);
     endfunction
 
     function void connect_phase(uvm_phase phase);
@@ -241,17 +286,24 @@ class smc_peripherals_env extends uvm_env;
 `ifdef SMC_USE_I3C_RTL
         if (i3c_agt != null) begin
             vseq_ctx.i3c_sqr = i3c_agt.sequencer;
+            if (cfg.ibi_dut_role == SMC_I3C_IBI_DUT_CONTROLLER)
+                vseq_ctx.i3c_target_sqr[0] = i3c_agt.sequencer;
             // The upstream driver waits for a reset negedge that may occur
             // before UVM run_phase starts. Initialize its public state here so
             // the first host sequence always begins from an idle bus.
             if (i3c_agt.driver != null)
                 i3c_agt.driver.bus_state = DrvIdle;
         end
-        if (i3c_agt_secondary != null) begin
-            vseq_ctx.i3c_secondary_sqr = i3c_agt_secondary.sequencer;
-            if (i3c_agt_secondary.driver != null)
-                i3c_agt_secondary.driver.bus_state = DrvIdle;
+        for (int unsigned slot = 1;
+             slot < cfg.ibi_controller_target_count; slot++) begin
+            if (i3c_target_agt[slot] == null)
+                continue;
+            vseq_ctx.i3c_target_sqr[slot] =
+              i3c_target_agt[slot].sequencer;
+            if (i3c_target_agt[slot].driver != null)
+                i3c_target_agt[slot].driver.bus_state = DrvIdle;
         end
+        vseq_ctx.i3c_secondary_sqr = vseq_ctx.i3c_target_sqr[1];
 `ifdef SMC_USE_I3C_RAL
         if ((ibi_observer != null) || (ibi_predictor != null) ||
             (ibi_scoreboard != null) ||
@@ -260,6 +312,14 @@ class smc_peripherals_env extends uvm_env;
             (ibi_controller_scoreboard != null)) begin
             if ((i3c_agt == null) || (i3c_agt.monitor == null) || (bus_agt == null))
                 `uvm_fatal("IBI_CHECK_CONNECT", "IBI checker sources are not available")
+        end
+        if (ibi_recovery_checker != null) begin
+            bus_agt.mon_analysis_port.connect(
+                ibi_recovery_checker.axi_export);
+            ibi_recovery_checker.recovery_port.connect(
+                ibi_functional_cov.analysis_export);
+            ibi_recovery_checker.recovery_port.connect(
+                ibi_sva_probe.analysis_export);
         end
         if ((ibi_observer != null) || (ibi_predictor != null) ||
             (ibi_scoreboard != null)) begin
@@ -296,6 +356,12 @@ class smc_peripherals_env extends uvm_env;
             if (ibi_sva_probe != null)
                 ibi_scoreboard.sva_port.connect(
                     ibi_sva_probe.analysis_export);
+            if (ibi_recovery_checker != null) begin
+                ibi_observer.sva_port.connect(
+                    ibi_recovery_checker.event_export);
+                ibi_scoreboard.sva_port.connect(
+                    ibi_recovery_checker.event_export);
+            end
         end
         if ((ibi_controller_observer != null) ||
             (ibi_controller_predictor != null) ||
@@ -303,12 +369,16 @@ class smc_peripherals_env extends uvm_env;
             if (!$cast(ibi_target_driver, i3c_agt.driver))
                 `uvm_fatal("IBI_TARGET_DRIVER",
                            "Controller IBI checking requires the smc_i3c_target_driver factory override")
-            if (i3c_agt_secondary != null) begin
-                if (!$cast(ibi_target_driver_secondary,
-                           i3c_agt_secondary.driver))
-                    `uvm_fatal("IBI_SECONDARY_TARGET_DRIVER",
-                               "Secondary IBI agent requires the smc_i3c_target_driver override")
+            ibi_target_driver_by_slot[0] = ibi_target_driver;
+            for (int unsigned slot = 1;
+                 slot < cfg.ibi_controller_target_count; slot++) begin
+                if (!$cast(ibi_target_driver_by_slot[slot],
+                           i3c_target_agt[slot].driver))
+                    `uvm_fatal("IBI_AUX_TARGET_DRIVER",
+                               $sformatf("IBI Target slot %0d requires the smc_i3c_target_driver override",
+                                         slot))
             end
+            ibi_target_driver_secondary = ibi_target_driver_by_slot[1];
             if ((ibi_controller_observer == null) ||
                 (ibi_controller_predictor == null) ||
                 (ibi_controller_scoreboard == null))
@@ -318,10 +388,11 @@ class smc_peripherals_env extends uvm_env;
                 ibi_controller_predictor.target_export);
             ibi_target_driver.ibi_analysis_port.connect(
                 ibi_controller_observer.target_export);
-            if (ibi_target_driver_secondary != null) begin
-                ibi_target_driver_secondary.ibi_analysis_port.connect(
+            for (int unsigned slot = 1;
+                 slot < cfg.ibi_controller_target_count; slot++) begin
+                ibi_target_driver_by_slot[slot].ibi_analysis_port.connect(
                     ibi_controller_predictor.target_export);
-                ibi_target_driver_secondary.ibi_analysis_port.connect(
+                ibi_target_driver_by_slot[slot].ibi_analysis_port.connect(
                     ibi_controller_observer.target_export);
             end
             i3c_agt.monitor.analysis_port.connect(
@@ -332,17 +403,20 @@ class smc_peripherals_env extends uvm_env;
                 ibi_controller_scoreboard.expected_export);
             ibi_controller_observer.actual_port.connect(
                 ibi_controller_scoreboard.actual_export);
+            bus_agt.mon_analysis_port.connect(
+                ibi_controller_scoreboard.axi_export);
             if (ibi_functional_cov != null)
                 ibi_controller_scoreboard.coverage_port.connect(
                     ibi_functional_cov.analysis_export);
             if (ibi_sva_probe != null)
                 ibi_controller_scoreboard.coverage_port.connect(
                     ibi_sva_probe.analysis_export);
+            if (ibi_recovery_checker != null)
+                ibi_controller_scoreboard.coverage_port.connect(
+                    ibi_recovery_checker.event_export);
         end
 `endif
 `endif
-        if (bus_agt != null && i3c_cov != null)
-            bus_agt.mon_analysis_port.connect(i3c_cov.analysis_export);
         if (bus_agt != null && scoreboard != null)
             bus_agt.mon_analysis_port.connect(scoreboard.bus_export);
 `ifdef SMC_USE_I3C_RAL

@@ -16,7 +16,7 @@
 //
 // File        : smc_peripherals_vseq_services.sv
 // Description : Runtime services for SMC peripheral virtual sequences.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-02
 //
 // *****************************************************************************
@@ -30,11 +30,19 @@ class smc_peripherals_vseq_services extends uvm_object;
         super.new(name);
     endfunction
 
+    // Idempotent: a nested vseq started with .start(null) re-enters
+    // smc_peripherals_base_vseq::body(), which calls this a second time. The
+    // top-level rst_n is released once at time zero and never re-asserted by an
+    // in-test recovery (e.g. the CSR-scoped HCI IBI queue reset), so a blind
+    // @(posedge rst_n) on the second call would wait for an edge that never
+    // arrives and deadlock. Wait only while reset is still active; once released
+    // the observability flag is set unconditionally so re-entry is a no-op.
     task wait_reset_release();
         if (vif == null) begin
             `uvm_fatal(get_type_name(), "smc_peripherals_vif is not configured")
         end
-        @(posedge vif.rst_n);
+        if (vif.rst_n !== 1'b1)
+            @(posedge vif.rst_n);
         vif.mark_smoke_seen_reset_release();
     endtask
 endclass : smc_peripherals_vseq_services

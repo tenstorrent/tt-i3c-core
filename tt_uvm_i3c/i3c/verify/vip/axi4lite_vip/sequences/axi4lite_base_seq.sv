@@ -16,7 +16,7 @@
 //
 // File        : axi4lite_base_seq.sv
 // Description : Base AXI4-Lite sequence with read/write helpers.
-// Authors     : Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-28
 //
 // *****************************************************************************

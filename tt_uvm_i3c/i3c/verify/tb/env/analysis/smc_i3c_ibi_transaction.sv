@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_ibi_transaction.sv
 // Description : Transaction models for I3C IBI.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-25
 //
 // *****************************************************************************
@@ -33,6 +33,7 @@ class smc_i3c_ibi_expected_item extends uvm_sequence_item;
   longint unsigned source_sequence;
   bit mdb_present;
   bit [7:0] mdb;
+  bit [2:0] expected_status_type;
   int unsigned payload_len;
   byte unsigned payload[$];
   bit expected_ack;
@@ -40,6 +41,9 @@ class smc_i3c_ibi_expected_item extends uvm_sequence_item;
   bit dat_match;
   bit [1:0] payload_policy;
   bit ibi_enabled;
+  bit irq_enabled_at_attempt;
+  bit irq_asserted_at_attempt;
+  bit queue_full_reject;
 
   `uvm_object_utils_begin(smc_i3c_ibi_expected_item)
     `uvm_field_int(transaction_id, UVM_DEFAULT)
@@ -48,6 +52,7 @@ class smc_i3c_ibi_expected_item extends uvm_sequence_item;
     `uvm_field_int(source_sequence, UVM_DEFAULT)
     `uvm_field_int(mdb_present, UVM_DEFAULT)
     `uvm_field_int(mdb, UVM_DEFAULT)
+    `uvm_field_int(expected_status_type, UVM_DEFAULT)
     `uvm_field_int(payload_len, UVM_DEFAULT)
     `uvm_field_queue_int(payload, UVM_DEFAULT)
     `uvm_field_int(expected_ack, UVM_DEFAULT)
@@ -56,6 +61,9 @@ class smc_i3c_ibi_expected_item extends uvm_sequence_item;
     `uvm_field_int(dat_match, UVM_DEFAULT)
     `uvm_field_int(payload_policy, UVM_DEFAULT)
     `uvm_field_int(ibi_enabled, UVM_DEFAULT)
+    `uvm_field_int(irq_enabled_at_attempt, UVM_DEFAULT)
+    `uvm_field_int(irq_asserted_at_attempt, UVM_DEFAULT)
+    `uvm_field_int(queue_full_reject, UVM_DEFAULT)
   `uvm_object_utils_end
 
   function new(string name = "smc_i3c_ibi_expected_item");
@@ -69,6 +77,7 @@ class smc_i3c_ibi_actual_item extends uvm_sequence_item;
   longint unsigned source_sequence;
   bit [6:0] addr;
   bit ack;
+  int unsigned retry_count;
   byte unsigned data[$];
   bit irq_seen;
   bit status_seen;
@@ -85,6 +94,7 @@ class smc_i3c_ibi_actual_item extends uvm_sequence_item;
     `uvm_field_int(source_sequence, UVM_DEFAULT)
     `uvm_field_int(addr, UVM_DEFAULT)
     `uvm_field_int(ack, UVM_DEFAULT)
+    `uvm_field_int(retry_count, UVM_DEFAULT)
     `uvm_field_queue_int(data, UVM_DEFAULT)
     `uvm_field_int(irq_seen, UVM_DEFAULT)
     `uvm_field_int(status_seen, UVM_DEFAULT)

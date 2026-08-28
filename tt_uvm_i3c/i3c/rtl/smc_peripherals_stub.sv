@@ -6,6 +6,12 @@
 //          Swap for real smc_peripherals RTL (keep the AXI4-Lite port set).
 ///////////////////////////////////////////////////////////////////////
 
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 VNCHIP LABS
+// Authors: Huynh Pham Anh Duy, Thai Hai Dang
+//
+// Pre-RTL behavioral stub for standalone runner qualification.
+
 `ifndef SMC_PERIPHERALS_STUB_SV
 `define SMC_PERIPHERALS_STUB_SV
 

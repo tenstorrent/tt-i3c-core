@@ -16,7 +16,7 @@
 //
 // File        : axi4lite_if.sv
 // Description : Signal interface for the AXI4-Lite protocol.
-// Authors     : Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-28
 //
 // *****************************************************************************

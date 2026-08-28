@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_target_driver.sv
 // Description : UVM driver for I3C target.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-25
 //
 // *****************************************************************************
@@ -59,6 +59,7 @@ class smc_i3c_target_driver extends i3c_driver;
   protected longint unsigned next_transaction_id = 1;
   protected longint unsigned next_source_sequence_by_addr[bit [6:0]];
   protected int unsigned target_slot;
+  protected smc_peripherals_env_cfg smc_cfg;
 
   function new(string name = "smc_i3c_target_driver",
                uvm_component parent = null);
@@ -68,19 +69,29 @@ class smc_i3c_target_driver extends i3c_driver;
   virtual function void build_phase(uvm_phase phase);
     super.build_phase(phase);
     ibi_analysis_port = new("ibi_analysis_port", this);
-    target_slot =
-      (get_parent().get_name() == "i3c_agt_secondary") ? 1 : 0;
+    if (!uvm_config_db#(int unsigned)::get(
+            this, "", "smc_i3c_target_slot", target_slot))
+      target_slot = 0;
+    // The type override can also instantiate this adapter outside the
+    // multi-target slot array. Telemetry is optional for those instances.
+    void'(uvm_config_db#(smc_peripherals_env_cfg)::get(
+            this, "", "smc_peripherals_env_cfg", smc_cfg));
   endfunction
 
   static function void install_type_override();
     i3c_driver::type_id::set_type_override(smc_i3c_target_driver::get_type());
   endfunction
 
+  static function void install_inst_override(string inst_path);
+    i3c_driver::type_id::set_inst_override(
+      smc_i3c_target_driver::get_type(), inst_path);
+  endfunction
+
   // Keep the vendored VIP untouched while hardening its Device-mode request
-  // lifetime for the SMC multi-target use case. The base implementation clears
-  // rsp on every loop but leaves req pointing at the previous item. After a
-  // completed arbitration, the STOP watcher can therefore re-arm from that
-  // stale req while get_next_item() waits for a new sequence item. If it
+  // lifetime for the SMC multi-target use case.  The base implementation
+  // clears rsp on every loop but leaves req pointing at the previous item.
+  // After a completed arbitration, the STOP watcher can therefore re-arm from
+  // that stale req while get_next_item() waits for a new sequence item.  If it
   // observes the just-completed STOP again, it dereferences the null rsp.
   //
   // Reset req together with rsp, and do not arm the STOP/RStart watcher until
@@ -106,7 +117,7 @@ class smc_i3c_target_driver extends i3c_driver;
             end
             begin
               // req alone is insufficient: it may become visible before the
-              // Device driver has allocated rsp. Both handles identify an
+              // Device driver has allocated rsp.  Both handles identify an
               // active request that can safely be terminated by STOP/RStart.
               wait((req != null) && (rsp != null));
               if (req.i3c)
@@ -191,7 +202,9 @@ class smc_i3c_target_driver extends i3c_driver;
     is_ibi_address_phase =
       (req != null) && req.IBI &&
       (bus_state inside {DrvIdle, DrvStart, DrvAddrArbit});
-    if (is_ibi_address_phase && !req.IBI_START) begin
+    if (is_ibi_address_phase) begin
+      if (smc_cfg != null)
+        smc_cfg.ibi_target_driver_armed[target_slot] = 1'b1;
       armed_event = uvm_event_pool::get_global(
         SMC_I3C_TARGET_IBI_ARMED_EVENT);
       armed_event.trigger();
@@ -199,7 +212,23 @@ class smc_i3c_target_driver extends i3c_driver;
         $sformatf("%s_%0d", SMC_I3C_TARGET_IBI_SLOT_ARMED_EVENT,
                   target_slot));
       armed_event.trigger();
+      if ((smc_cfg != null) && smc_cfg.ibi_target_driver_barrier_enable)
+        wait(smc_cfg.ibi_target_driver_release);
     end
+    fork : target_start_probe
+      begin
+        if (is_ibi_address_phase) begin
+          forever begin
+            @(negedge cfg.vif.sda_i);
+            if (cfg.vif.scl_i === 1'b1) begin
+              if (smc_cfg != null)
+                smc_cfg.ibi_target_driver_start_seen[target_slot] = 1'b1;
+              break;
+            end
+          end
+        end
+      end
+    join_none
     fork
       super.drive_device_item(req, rsp);
       begin
@@ -211,6 +240,19 @@ class smc_i3c_target_driver extends i3c_driver;
         end
       end
     join
+    disable target_start_probe;
+    if (is_ibi_address_phase && (smc_cfg != null)) begin
+      smc_cfg.ibi_target_driver_completed[target_slot] = 1'b1;
+      if (rsp != null) begin
+        smc_cfg.ibi_target_driver_resolved_addr[target_slot] = rsp.addr;
+        smc_cfg.ibi_target_driver_ack[target_slot] = rsp.dev_ack;
+        smc_cfg.ibi_target_driver_arbitration_won[target_slot] =
+          (rsp.addr == req.IBI_ADDR) && rsp.dir;
+      end
+      smc_cfg.ibi_target_driver_released[target_slot] =
+        ((cfg.vif.device_sda_o === 1'b1) &&
+         (cfg.vif.device_sda_pp_en === 1'b0));
+    end
     if (is_ibi_address_phase && (rsp != null) &&
         !((rsp.addr == req.IBI_ADDR) && rsp.dir)) begin
       release_bus();

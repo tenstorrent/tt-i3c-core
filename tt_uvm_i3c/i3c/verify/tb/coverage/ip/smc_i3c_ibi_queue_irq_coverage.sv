@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_ibi_queue_irq_coverage.sv
 // Description : Functional coverage collector for I3C IBI queue IRQ.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-24
 //
 // *****************************************************************************
@@ -27,9 +27,9 @@
 class smc_i3c_ibi_queue_irq_coverage extends uvm_object;
   `uvm_object_utils(smc_i3c_ibi_queue_irq_coverage)
 
-  localparam bit [1:0] REC_STATUS = 2'd0, REC_DATA = 2'd1, REC_ERROR = 2'd2;
+  localparam bit [1:0] REC_STATUS = 2'd0, REC_DATA = 2'd1;
   localparam bit [1:0] QS_NORMAL = 2'd0, QS_EMPTY = 2'd1,
-                       QS_FULL   = 2'd2, QS_OVERFLOW = 2'd3;
+                       QS_FULL   = 2'd2;
   localparam bit [2:0] SRC_THLD = 3'd0, SRC_FULL = 3'd1, SRC_DONE = 3'd2,
                        SRC_ERROR = 3'd3, SRC_PENDING = 3'd4;
   localparam bit [1:0] IRQ_IDLE = 2'd0, IRQ_ASSERT = 2'd1,
@@ -61,14 +61,16 @@ class smc_i3c_ibi_queue_irq_coverage extends uvm_object;
     cp_record_kind: coverpoint cov_record_kind {
       bins status_only = {REC_STATUS};
       bins with_data   = {REC_DATA};
-      bins error_rec   = {REC_ERROR};
+      // The architectural IBI queue contains either a status-only response or
+      // a response with data. Error conditions are reported by STATUS/IRQ and
+      // do not enqueue a third record format.
+      ignore_bins reserved = {[2:3]};
     }
 
     cp_queue_state: coverpoint cov_queue_state {
       bins normal   = {QS_NORMAL};
       bins empty    = {QS_EMPTY};
       bins full     = {QS_FULL};
-      bins overflow = {QS_OVERFLOW};
     }
 
     cp_status_source: coverpoint cov_status_source {
@@ -104,9 +106,49 @@ class smc_i3c_ibi_queue_irq_coverage extends uvm_object;
     // correlation.
     x_queue: cross cp_fifo_level, cp_response_h {
       ignore_bins empty_on_record_write = binsof(cp_fifo_level.empty);
+      // A rejected notification does not commit a record. Mid/high occupancy
+      // belongs to records already in the FIFO and must not be attributed to
+      // the rejected response context.
+      ignore_bins rejected_without_record =
+        binsof(cp_response_h.nack) &&
+        (binsof(cp_fifo_level.mid) || binsof(cp_fifo_level.high));
     }
 
-    x_interrupt: cross cp_status_source, cp_irq_state;
+    // Score only architecturally meaningful source/state lifecycles. Keeping
+    // the full Cartesian product required unrelated sources to exhibit forced
+    // or W1C behavior and left permanent holes in an IBI-only regression.
+    x_interrupt: cross cp_status_source, cp_irq_state {
+      bins thld_idle = binsof(cp_status_source.thld) &&
+                       binsof(cp_irq_state.idle);
+      bins thld_asserted = binsof(cp_status_source.thld) &&
+                           binsof(cp_irq_state.asserted);
+      bins thld_cleared = binsof(cp_status_source.thld) &&
+                          binsof(cp_irq_state.w1c_cleared);
+      bins done_asserted = binsof(cp_status_source.done) &&
+                           binsof(cp_irq_state.asserted);
+      bins done_cleared = binsof(cp_status_source.done) &&
+                          binsof(cp_irq_state.w1c_cleared);
+      bins full_idle = binsof(cp_status_source.full) &&
+                       binsof(cp_irq_state.idle);
+      bins pending_idle = binsof(cp_status_source.pending) &&
+                          binsof(cp_irq_state.idle);
+      bins pending_asserted = binsof(cp_status_source.pending) &&
+                              binsof(cp_irq_state.asserted);
+      bins forced = binsof(cp_irq_state.forced);
+      bins error_asserted = binsof(cp_status_source.error) &&
+                            binsof(cp_irq_state.asserted);
+      bins error_cleared = binsof(cp_status_source.error) &&
+                           binsof(cp_irq_state.w1c_cleared);
+      ignore_bins done_idle = binsof(cp_status_source.done) &&
+                              binsof(cp_irq_state.idle);
+      ignore_bins full_active = binsof(cp_status_source.full) &&
+        (binsof(cp_irq_state.asserted) ||
+         binsof(cp_irq_state.w1c_cleared));
+      ignore_bins pending_cleared = binsof(cp_status_source.pending) &&
+                                    binsof(cp_irq_state.w1c_cleared);
+      ignore_bins error_idle = binsof(cp_status_source.error) &&
+                               binsof(cp_irq_state.idle);
+    }
   endgroup
 
   function new(string name = "smc_i3c_ibi_queue_irq_coverage");

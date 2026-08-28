@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_ibi_attempt_coverage.sv
 // Description : Functional coverage collector for I3C IBI attempt.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-21
 //
 // *****************************************************************************
@@ -68,40 +68,36 @@ class smc_i3c_ibi_attempt_coverage extends uvm_object;
       bins en_on  = {1};
     }
 
-    // The monitor classifies the raw address through the core address policy.
+    // ATTEMPT is published only after a legal IBI has started. Reserved and
+    // broadcast addresses belong to the pre-attempt eligibility/blocked
+    // checks; scoring them here would require the DUT to start an illegal IBI.
     cp_target_addr_class: coverpoint cov_addr_class iff (cov_addr_class_valid) {
       bins valid     = {IBI_ADDR_VALID};
-      bins reserved  = {IBI_ADDR_RESERVED};
-      bins broadcast = {IBI_ADDR_BROADCAST};
-    }
-    cp_target_addr_raw_h: coverpoint cov_ibi_addr iff (cov_addr_class_valid) {
-      option.weight       = 0;
-      option.auto_bin_max = 16;
+      ignore_bins reserved  = {IBI_ADDR_RESERVED};
+      ignore_bins broadcast = {IBI_ADDR_BROADCAST};
     }
 
-    // BCR bit1 advertises IBI request capability; bit2 advertises MDB use.
+    // This group measures started IBI attempts. BCR[1]==0 is an eligibility
+    // rejection and therefore cannot legally reach this sampling point. The
+    // pinned core also requires an MDB for every accepted IBI; accepted
+    // no-MDB operation is tracked as NO MEASURE in the IBI vplan.
     cp_ibi_capable: coverpoint cov_bcr[1] {
-      bins no  = {0};
+      ignore_bins no = {0};
       bins yes = {1};
     }
     cp_mdb_capable: coverpoint cov_bcr[2] {
-      bins no  = {0};
+      ignore_bins no = {0};
       bins yes = {1};
     }
-    x_bcr_capability: cross cp_ibi_capable, cp_mdb_capable {
-`ifdef SMC_I3C_COV_STRICT_ILLEGAL
-      illegal_bins mdb_without_ibi =
-        binsof(cp_ibi_capable.no) && binsof(cp_mdb_capable.yes);
-`else
-      ignore_bins mdb_without_ibi =
-        binsof(cp_ibi_capable.no) && binsof(cp_mdb_capable.yes);
-`endif
-    }
+    // Both negative capability values are ignored above, leaving only the
+    // legal accepted-attempt capability combination in this cross.
+    x_bcr_capability: cross cp_ibi_capable, cp_mdb_capable;
 
     cp_requester_count: coverpoint cov_requester_count {
       bins single = {1};
       bins two    = {2};
-      bins many   = {[3:$]};
+      bins three  = {3};
+      bins four   = {4};
       ignore_bins above_configured = {[TB_MAX_IBI_REQUESTERS+1:$]};
     }
 
@@ -128,7 +124,9 @@ class smc_i3c_ibi_attempt_coverage extends uvm_object;
         binsof(cp_requester_count.single) &&
         (binsof(cp_arb_outcome.won) || binsof(cp_arb_outcome.lost));
       ignore_bins multi_sole =
-        (binsof(cp_requester_count.two) || binsof(cp_requester_count.many)) &&
+        (binsof(cp_requester_count.two) ||
+         binsof(cp_requester_count.three) ||
+         binsof(cp_requester_count.four)) &&
         binsof(cp_arb_outcome.sole);
     }
 

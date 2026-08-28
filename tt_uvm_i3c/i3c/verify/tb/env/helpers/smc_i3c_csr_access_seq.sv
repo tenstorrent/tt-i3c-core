@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_csr_access_seq.sv
 // Description : UVM sequence for I3C CSR access.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-16
 //
 // *****************************************************************************

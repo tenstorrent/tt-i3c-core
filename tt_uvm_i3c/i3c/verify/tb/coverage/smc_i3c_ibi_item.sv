@@ -16,8 +16,8 @@
 //
 // File        : smc_i3c_ibi_item.sv
 // Description : UVM transaction item for I3C IBI.
-// Authors     : Duy Huynh, Dang Thai
-// Date        : 2026-07-24
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
+// Date        : 2026-08-06
 //
 // *****************************************************************************
 
@@ -25,10 +25,11 @@
 `define SMC_I3C_IBI_ITEM_SV
 
 // Event kind selecting which covergroup snapshot this item feeds.
-typedef enum bit [1:0] {
-  IBI_EVT_ATTEMPT    = 2'd0,
-  IBI_EVT_COMPLETION = 2'd1,
-  IBI_EVT_QUEUE_IRQ  = 2'd2
+typedef enum bit [2:0] {
+  IBI_EVT_ATTEMPT    = 3'd0,
+  IBI_EVT_COMPLETION = 3'd1,
+  IBI_EVT_QUEUE_IRQ  = 3'd2,
+  IBI_EVT_RECOVERY   = 3'd3
 } ibi_evt_e;
 
 // Address classification is produced by the monitor from the core's address
@@ -107,12 +108,21 @@ class smc_i3c_ibi_item extends uvm_sequence_item;
   bit         queue_record_write;     // 1 only for a direct enqueue snapshot
   bit         response_context_valid; // ack belongs to this transaction_id
   int unsigned fifo_level;     // architectural IBI_QUEUE_DEPTH snapshot
-  bit [1:0]   record_kind;     // 0 = status_only, 1 = with_data, 2 = error_rec
-  bit [1:0]   queue_state;     // 0 = normal, 1 = empty, 2 = full, 3 = overflow
+  bit [1:0]   record_kind;     // 0 = status_only, 1 = with_data; 2/3 reserved
+  bit [1:0]   queue_state;     // architectural states: 0 normal, 1 empty, 2 full
   bit [2:0]   status_source;   // 0 thld,1 full,2 done,3 error,4 pending
   bit [1:0]   irq_state;       // 0 = idle, 1 = asserted, 2 = w1c_cleared, 3 = forced
+  bit         irq_enabled;     // Controller interrupt-signal enable snapshot
   bit         threshold_relation_valid;
   bit         threshold_reached; // free entries are at or above IBI_THLD
+
+  // ---- RECOVERY result (published only by the passive recovery checker) ----
+  bit         recovery_trigger_seen;
+  bit         recovery_queue_empty;
+  bit         recovery_irq_low;
+  bit         recovery_bus_idle;
+  bit         recovery_followup_expected;
+  bit         recovery_forward_progress;
 
   `uvm_object_utils_begin(smc_i3c_ibi_item)
     `uvm_field_enum(ibi_evt_e, evt_kind, UVM_DEFAULT)
@@ -149,8 +159,15 @@ class smc_i3c_ibi_item extends uvm_sequence_item;
     `uvm_field_int(queue_state,      UVM_DEFAULT)
     `uvm_field_int(status_source,    UVM_DEFAULT)
     `uvm_field_int(irq_state,        UVM_DEFAULT)
+    `uvm_field_int(irq_enabled,      UVM_DEFAULT)
     `uvm_field_int(threshold_relation_valid, UVM_DEFAULT)
     `uvm_field_int(threshold_reached, UVM_DEFAULT)
+    `uvm_field_int(recovery_trigger_seen, UVM_DEFAULT)
+    `uvm_field_int(recovery_queue_empty, UVM_DEFAULT)
+    `uvm_field_int(recovery_irq_low, UVM_DEFAULT)
+    `uvm_field_int(recovery_bus_idle, UVM_DEFAULT)
+    `uvm_field_int(recovery_followup_expected, UVM_DEFAULT)
+    `uvm_field_int(recovery_forward_progress, UVM_DEFAULT)
   `uvm_object_utils_end
 
   function new(string name = "smc_i3c_ibi_item");

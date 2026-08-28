@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_ibi_completion_coverage.sv
 // Description : Functional coverage collector for I3C IBI completion.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-21
 //
 // *****************************************************************************
@@ -126,16 +126,12 @@ class smc_i3c_ibi_completion_coverage extends uvm_object;
 
     cp_reset_error_kind: coverpoint cov_reset_error_kind {
       bins none        = {IBI_ERR_NONE};
-      bins reset_flush = {IBI_ERR_RESET_FLUSH};
-      bins overflow    = {IBI_ERR_OVERFLOW};
-      bins abort       = {IBI_ERR_ABORT};
       bins proto_error = {IBI_ERR_PROTOCOL};
-    }
-
-    cp_recovery_result: coverpoint cov_recovery_result {
-      bins not_applicable = {IBI_RECOVERY_NA};
-      bins recovered      = {IBI_RECOVERED};
-      bins not_recovered  = {IBI_NOT_RECOVERED};
+      // Reset/flush, overflow and abort are published as IBI_EVT_RECOVERY and
+      // scored by cg_ibi_recovery. They never traverse sample_completion().
+      ignore_bins recovery_owned = {IBI_ERR_RESET_FLUSH,
+                                     IBI_ERR_OVERFLOW,
+                                     IBI_ERR_ABORT};
     }
 
     // ---- mirror coverpoints (weight 0: crosses only, no score impact) ----
@@ -161,6 +157,10 @@ class smc_i3c_ibi_completion_coverage extends uvm_object;
         binsof(cp_response.nack) && !binsof(cp_payload_len.none);
       ignore_bins absent_mdb_with_payload =
         binsof(cp_mdb_group.absent) && !binsof(cp_payload_len.none);
+      // The pinned Controller requires an MDB for every accepted IBI. An
+      // address-only ACK is therefore outside the supported architecture.
+      ignore_bins accepted_without_mdb =
+        binsof(cp_response.ack) && binsof(cp_mdb_group.absent);
     }
 
     x_response: cross cp_response, cp_retry_count, cp_payload_len {
@@ -177,34 +177,41 @@ class smc_i3c_ibi_completion_coverage extends uvm_object;
         binsof(cp_dat_decision.nomatch_reject) &&
         (binsof(cp_payload_policy.mandatory) ||
          binsof(cp_payload_policy.optional));
+      ignore_bins accepted_without_mdb =
+        binsof(cp_dat_decision.match_accept) &&
+        binsof(cp_mdb_present.absent);
+      // A match decision is derived from a DAT entry, whose payload field is
+      // mandatory or optional; POL_NONE is reserved for no-match handling.
+      ignore_bins matched_without_policy =
+        (binsof(cp_dat_decision.match_accept) ||
+         binsof(cp_dat_decision.match_reject)) &&
+        binsof(cp_payload_policy.none);
+      // In the pinned Controller model the DAT payload-enable bit gates IBI
+      // acceptance. POL_MAND represents that bit clear, so it cannot combine
+      // with match_accept.
+      ignore_bins mandatory_accept =
+        binsof(cp_dat_decision.match_accept) &&
+        binsof(cp_payload_policy.mandatory);
     }
 
-    x_error_status: cross cp_reset_error_kind, cp_terminal_status;
-
-    x_error_recovery: cross cp_reset_error_kind, cp_recovery_result {
-      ignore_bins no_error_with_recovery =
+    // The Controller scoreboard classifies a partial-data completion as a
+    // protocol error. Other terminal outcomes are protocol-clean completion
+    // statuses; recovery causes are owned by cg_ibi_recovery.
+    x_error_status: cross cp_reset_error_kind, cp_terminal_status {
+      ignore_bins protocol_non_partial =
+        binsof(cp_reset_error_kind.proto_error) &&
+        !binsof(cp_terminal_status.failure_partial);
+      ignore_bins clean_partial =
         binsof(cp_reset_error_kind.none) &&
-        (binsof(cp_recovery_result.recovered) ||
-         binsof(cp_recovery_result.not_recovered));
-      ignore_bins error_without_recovery_result =
-        !binsof(cp_reset_error_kind.none) &&
-        binsof(cp_recovery_result.not_applicable);
+        binsof(cp_terminal_status.failure_partial);
     }
 
-    // Key IBI closure cross (sheet 05 R18): accept/reject x MDB x payload x
-    // arbitration priority x enable state. Disabled IBI cannot be accepted.
-    x_master: cross cp_dat_decision, cp_mdb_group, cp_payload_len,
-                     cp_arb_outcome_h, cp_event_enable_h {
-      ignore_bins reject_with_mdb =
-        (binsof(cp_dat_decision.match_reject) ||
-         binsof(cp_dat_decision.nomatch_reject)) &&
-        !binsof(cp_mdb_group.absent);
-      ignore_bins reject_with_payload =
-        (binsof(cp_dat_decision.match_reject) ||
-         binsof(cp_dat_decision.nomatch_reject)) &&
-        !binsof(cp_payload_len.none);
-      ignore_bins absent_mdb_with_payload =
-        binsof(cp_mdb_group.absent) && !binsof(cp_payload_len.none);
+    // Keep requirement-owned relationships independently diagnosable. The
+    // former five-dimensional x_master multiplied content, policy and
+    // arbitration into many cells that had no distinct requirement meaning.
+    // Content is already closed by x_content; these crosses retain the two
+    // protocol relationships that matter at completion.
+    x_enable_decision: cross cp_dat_decision, cp_event_enable_h {
 `ifdef SMC_I3C_COV_STRICT_ILLEGAL
       illegal_bins disabled_accept =
         binsof(cp_event_enable_h.en_off) && binsof(cp_dat_decision.match_accept);
@@ -212,6 +219,17 @@ class smc_i3c_ibi_completion_coverage extends uvm_object;
       ignore_bins disabled_accept =
         binsof(cp_event_enable_h.en_off) && binsof(cp_dat_decision.match_accept);
 `endif
+      // ibi_enabled is derived from a valid DAT match. A no-match rejection
+      // therefore cannot carry enabled context.
+      ignore_bins nomatch_enabled =
+        binsof(cp_dat_decision.nomatch_reject) &&
+        binsof(cp_event_enable_h.en_on);
+    }
+
+    x_arb_response: cross cp_arb_outcome_h, cp_response {
+      // An arbitration loser releases the bus before the Controller response
+      // phase, so neither ACK nor NACK can be attributed to that attempt.
+      ignore_bins lost_response = binsof(cp_arb_outcome_h.lost);
     }
   endgroup
 

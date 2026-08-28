@@ -16,7 +16,7 @@
 //
 // File        : axi4lite_vip_pkg.sv
 // Description : UVM package for the AXI4-Lite master VIP.
-// Authors     : Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-28
 //
 // *****************************************************************************

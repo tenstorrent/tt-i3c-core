@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_ral_model.sv
 // Description : I3C register-model wrapper for the AXI4-Lite frontdoor.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-18
 //
 // *****************************************************************************
@@ -27,7 +27,7 @@ class smc_i3c_ral_model extends I3CCSR;
     endfunction
 
     virtual function void build();
-        // The upstream root map is a 16-byte UVM_NO_ENDIAN map. This environment reaches
+        // The upstream root map is a 16-byte UVM_NO_ENDIAN map. OCAH reaches
         // these registers through a 32-bit little-endian AXI-Lite frontdoor.
         this.default_map = create_map("reg_map", 0, 4, UVM_LITTLE_ENDIAN);
 

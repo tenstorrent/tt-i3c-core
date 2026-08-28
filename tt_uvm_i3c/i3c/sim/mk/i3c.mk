@@ -1,38 +1,11 @@
 # Manual I3C integration settings. Include after generated paths.mk.
-# *****************************************************************************
-# SPDX-License-Identifier: Apache-2.0
-# Copyright (c) 2026 VNCHIP LABS
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     https://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-# File        : i3c.mk
-# Description : TT UVM I3C simulation support file.
-# Authors     : Duy Huynh, Dang Thai
-# Date        : 2026-08-11
-#
-# *****************************************************************************
-
-TT_UVM_I3C_ROOT     := $(abspath $(ROOT_DIR)/..)
+I3C_LOCAL_CONFIG    := $(ROOT_DIR)/sim/project/i3c_source.local.mk
+-include $(I3C_LOCAL_CONFIG)
 DUT_MODE            ?= rtl
-SOURCE_MODE         ?= pinned
+SOURCE_MODE         ?= $(if $(I3C_LOCAL_SOURCE_MODE),$(I3C_LOCAL_SOURCE_MODE),pinned)
 I3C_SOURCE_LAYOUT   ?= auto
-I3C_ROOT_DIR        ?=
-CALIPTRA_ROOT       ?=
-ifeq ($(strip $(CALIPTRA_ROOT)),)
-ifneq ($(strip $(I3C_ROOT_DIR)),)
-CALIPTRA_ROOT       := $(I3C_ROOT_DIR)/third_party/caliptra-rtl
-endif
-endif
+I3C_ROOT_DIR        ?= $(I3C_LOCAL_ROOT_DIR)
+CALIPTRA_ROOT       ?= $(if $(I3C_LOCAL_CALIPTRA_ROOT),$(I3C_LOCAL_CALIPTRA_ROOT),$(I3C_ROOT_DIR)/third_party/caliptra-rtl)
 I3C_VIP_ROOT        := $(ROOT_DIR)/verify/vip/i3c_vip
 I3C_MANIFEST        := $(ROOT_DIR)/rtl/external/i3c_manifest.mk
 

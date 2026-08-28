@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_ibi_predictor.sv
 // Description : Reference predictor for I3C IBI.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-24
 //
 // *****************************************************************************

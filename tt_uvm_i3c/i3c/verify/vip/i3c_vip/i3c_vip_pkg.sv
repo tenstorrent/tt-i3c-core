@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0
+// Derived from the CHIPS Alliance I3C UVM VIP and vendored through
+// the Tenstorrent tt-i3c-core fork.
+
 package i3c_vip_pkg;
   // dep packages
   import uvm_pkg::*;

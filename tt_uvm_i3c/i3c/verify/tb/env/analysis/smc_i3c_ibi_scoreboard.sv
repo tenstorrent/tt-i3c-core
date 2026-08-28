@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_ibi_scoreboard.sv
 // Description : Scoreboard for I3C IBI.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-24
 //
 // *****************************************************************************
@@ -144,7 +144,8 @@ class smc_i3c_ibi_scoreboard extends uvm_scoreboard;
       string source_name,
       smc_i3c_ibi_expected_item expected,
       byte unsigned actual_data[$],
-      longint unsigned actual_id);
+      longint unsigned actual_id,
+      int unsigned partial_expected_size);
     int unsigned expected_size;
     bit mismatch;
 
@@ -152,13 +153,16 @@ class smc_i3c_ibi_scoreboard extends uvm_scoreboard;
     // those bytes onto the bus. A terminal address NACK must be followed by
     // STOP and therefore has an empty host/passive data stream.
     expected_size = expected.expected_ack ?
-      expected.payload_len + (expected.mdb_present ? 1 : 0) : 0;
+      (cfg.ibi_expect_partial_data ? partial_expected_size :
+       expected.payload_len + (expected.mdb_present ? 1 : 0)) : 0;
     mismatch = (actual_data.size() != expected_size);
     if (!mismatch && expected.expected_ack && expected.mdb_present &&
         (actual_data[0] !== expected.mdb))
       mismatch = 1'b1;
     if (!mismatch && expected.expected_ack) begin
-      for (int unsigned index = 0; index < expected.payload_len; index++) begin
+      for (int unsigned index = 0;
+           index < (expected_size - (expected.mdb_present ? 1 : 0));
+           index++) begin
         if ((index >= expected.payload.size()) ||
             (actual_data[index + (expected.mdb_present ? 1 : 0)] !==
              expected.payload[index])) begin
@@ -203,6 +207,8 @@ class smc_i3c_ibi_scoreboard extends uvm_scoreboard;
     item.queue_state = observed_queue_state();
     item.status_source = status_source;
     item.irq_state = irq_state;
+    item.role = 1'b0;
+    item.irq_enabled = 1'b1;
     item.ack = response_ack;
     item.threshold_relation_valid =
       observed_ibi_threshold_valid && observed_fifo_level_valid &&
@@ -237,9 +243,16 @@ class smc_i3c_ibi_scoreboard extends uvm_scoreboard;
       item.mdb = actual.data[0];
     item.payload_len = item.mdb_present ? actual.data.size() - 1 : 0;
     item.ibi_enabled = actual.ibi_enabled_at_attempt;
-    item.reset_error_kind = IBI_ERR_NONE;
-    item.recovery_result = IBI_RECOVERY_NA;
-    item.expected_content_valid = 1'b1;
+    item.reset_error_kind =
+      (actual.terminal_status == IBI_STATUS_FAILURE_PARTIAL_DATA) ?
+        IBI_ERR_PROTOCOL : IBI_ERR_NONE;
+    item.recovery_result =
+      (actual.terminal_status == IBI_STATUS_FAILURE_PARTIAL_DATA) ?
+        IBI_NOT_RECOVERED : IBI_RECOVERY_NA;
+    // A Controller-aborted partial transfer is intentionally shorter than
+    // the descriptor. Content equality applies only to completed transfers.
+    item.expected_content_valid =
+      actual.terminal_status != IBI_STATUS_FAILURE_PARTIAL_DATA;
     item.expected_mdb_present = expected.mdb_present;
     item.expected_mdb = expected.mdb;
     item.expected_payload_len = expected.payload_len;
@@ -270,7 +283,8 @@ class smc_i3c_ibi_scoreboard extends uvm_scoreboard;
                                 actual.transaction_id),
                       expected.transaction_id);
     compare_byte_stream("host", expected, actual.data,
-                        actual.transaction_id);
+                        actual.transaction_id,
+                        cfg.ibi_partial_host_rx_bytes);
 
     if (!actual.irq_seen)
       record_mismatch("IBI IRQ", "completion lacks IRQ evidence",
@@ -301,7 +315,8 @@ class smc_i3c_ibi_scoreboard extends uvm_scoreboard;
                                   actual.ack, actual.passive_ack),
                         expected.transaction_id);
       compare_byte_stream("passive monitor", expected,
-                          actual.passive_data, actual.transaction_id);
+                          actual.passive_data, actual.transaction_id,
+                          cfg.ibi_partial_passive_bytes);
     end else if (cfg.require_ibi_passive_monitor_match) begin
       record_mismatch("passive monitor observation",
                       "host-confirmed IBI was not observed passively",

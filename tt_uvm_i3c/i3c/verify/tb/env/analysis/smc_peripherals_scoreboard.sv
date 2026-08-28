@@ -16,7 +16,7 @@
 //
 // File        : smc_peripherals_scoreboard.sv
 // Description : Scoreboard for peripherals.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-25
 //
 // *****************************************************************************

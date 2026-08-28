@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_boundary_sva.sv
 // Description : Assertions and cover properties for I3C boundary.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-28
 //
 // *****************************************************************************

@@ -16,8 +16,8 @@
 //
 // File        : smc_peripherals_vseq_pkg.sv
 // Description : Package for SMC peripheral virtual sequences.
-// Authors     : Duy Huynh, Dang Thai
-// Date        : 2026-07-25
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
+// Date        : 2026-08-07
 //
 // *****************************************************************************
 
@@ -41,25 +41,48 @@ package smc_peripherals_vseq_pkg;
 `endif
 
     `include "smc_peripherals_base_vseq.sv"
-    `include "smc_i3c_csr_smoke_seq.sv"
-    `include "smc_i3c_csr_smoke_vseq.sv"
-    `include "smc_i3c_sanity_vseq.sv"
+    `include "common/smc_i3c_csr_smoke_seq.sv"
+    `include "common/smc_i3c_csr_smoke_vseq.sv"
+    `include "common/smc_i3c_sanity_vseq.sv"
 `ifdef SMC_USE_I3C_RTL
-    `include "ibi/smc_i3c_host_accept_ibi_seq.sv"
-    `include "ibi/smc_i3c_target_send_ibi_seq.sv"
-    `include "ibi/smc_i3c_target_private_write_seq.sv"
+    `include "smc_i3c_host_accept_ibi_seq.sv"
+    `include "smc_i3c_target_send_ibi_seq.sv"
+    `include "smc_i3c_target_private_write_seq.sv"
+    `include "smc_i3c_target_private_read_seq.sv"
 `endif
-    `include "ibi/smc_i3c_ibi_base_vseq.sv"
-    `include "ibi/smc_i3c_ibi_basic_vseq.sv"
-    `include "ibi/smc_i3c_ibi_ack_nack_vseq.sv"
-    `include "ibi/smc_i3c_ibi_mdb_payload_vseq.sv"
-    `include "ibi/smc_i3c_ibi_fifo_irq_vseq.sv"
-    `include "ibi/smc_i3c_ibi_controller_receive_vseq.sv"
-    `include "ibi/smc_i3c_ibi_controller_content_vseq.sv"
-    `include "ibi/smc_i3c_ibi_controller_policy_vseq.sv"
-    `include "ibi/smc_i3c_ibi_controller_multi_target_vseq.sv"
-    `include "ibi/smc_i3c_ibi_controller_timing_context_vseq.sv"
+    `include "ibi/base/smc_i3c_ibi_base_vseq.sv"
+    `include "smc_i3c_ibi_random_plan.sv"
+    `include "ibi/base/smc_i3c_ibi_random_base_vseq.sv"
+    `include "ibi/target_tx/smc_i3c_ibi_target_tx_random_vseq.sv"
+    `include "ibi/target_tx/smc_i3c_ibi_target_tx_stress_vseq.sv"
+    `include "ibi/target_tx/smc_i3c_ibi_target_tx_basic_vseq.sv"
+    `include "ibi/target_tx/smc_i3c_ibi_target_tx_ack_nack_vseq.sv"
+    `include "ibi/target_tx/smc_i3c_ibi_target_tx_recovery_cleanup_vseq.sv"
+    `include "ibi/target_tx/smc_i3c_ibi_target_tx_retry_arbitration_vseq.sv"
+    `include "ibi/target_tx/smc_i3c_ibi_target_tx_mdb_payload_vseq.sv"
+    `include "ibi/target_tx/smc_i3c_ibi_target_tx_fifo_irq_vseq.sv"
+    `include "ibi/controller_rx/smc_i3c_ibi_controller_rx_basic_vseq.sv"
+    `include "ibi/controller_rx/smc_i3c_ibi_controller_rx_content_vseq.sv"
+    `include "ibi/controller_rx/smc_i3c_ibi_controller_rx_fifo_irq_vseq.sv"
+    `include "ibi/controller_rx/smc_i3c_ibi_controller_rx_policy_vseq.sv"
+    `include "ibi/controller_rx/smc_i3c_ibi_controller_rx_no_mdb_vseq.sv"
+    `include "ibi/controller_rx/smc_i3c_ibi_controller_rx_random_vseq.sv"
+    `include "ibi/controller_rx/smc_i3c_ibi_controller_rx_multi_target_vseq.sv"
+    `include "ibi/target_tx/smc_i3c_ibi_target_tx_multi_target_vseq.sv"
+    // The DUT-loss context closure can run the checked Private Write/IBI
+    // sequence as a real preceding transfer before contested arbitration.
+    `include "ibi/target_tx/smc_i3c_ibi_target_tx_busy_bus_block_vseq.sv"
+    `include "ibi/target_tx/smc_i3c_ibi_target_tx_dut_loss_vseq.sv"
+    `include "ibi/controller_rx/smc_i3c_ibi_controller_rx_timing_context_vseq.sv"
+    `include "ibi/controller_rx/smc_i3c_ibi_controller_rx_reset_flush_vseq.sv"
+    `include "ibi/controller_rx/smc_i3c_ibi_controller_rx_recovery_cleanup_vseq.sv"
+    `include "ibi/controller_rx/smc_i3c_ibi_controller_rx_soft_rst_selfclear_vseq.sv"
+    `include "ibi/controller_rx/smc_i3c_ibi_controller_rx_mdb_decode_vseq.sv"
+    `include "ibi/controller_rx/smc_i3c_ibi_controller_rx_pending_read_notification_vseq.sv"
+    `include "ibi/target_tx/smc_i3c_ibi_target_tx_overflow_vseq.sv"
+    `include "ibi/target_tx/smc_i3c_ibi_target_tx_invalid_target_vseq.sv"
+    `include "ibi/base/smc_i3c_ibi_multi_target_signoff_vseqs.sv"
 `ifdef SMC_USE_I3C_RAL
-    `include "smc_i3c_ral_all_regs_vseq.sv"
+    `include "common/smc_i3c_ral_all_regs_vseq.sv"
 `endif
 endpackage : smc_peripherals_vseq_pkg

@@ -16,8 +16,8 @@
 //
 // File        : smc_peripherals_vseq_context.sv
 // Description : Runtime context shared by SMC peripheral virtual sequences.
-// Authors     : Duy Huynh, Dang Thai
-// Date        : 2026-07-25
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
+// Date        : 2026-08-06
 //
 // *****************************************************************************
 
@@ -28,8 +28,15 @@ class smc_peripherals_vseq_context extends uvm_object;
     smc_peripherals_vseq_services services;
     axi4lite_sequencer #(TB_ADDR_WIDTH, TB_DATA_WIDTH) bus_sqr;  // P6: shared VIP sqr
     smc_i3c_csr_helper #(TB_ADDR_WIDTH, TB_DATA_WIDTH) i3c_csr_helper;
+    smc_i3c_ibi_blocked_coverage i3c_ibi_blocked_cov;
+`ifdef SMC_USE_I3C_RTL
+`ifdef SMC_USE_I3C_RAL
+    smc_i3c_ibi_recovery_checker i3c_ibi_recovery_checker;
+`endif
+`endif
 `ifdef SMC_USE_I3C_RTL
     i3c_sequencer i3c_sqr;
+    i3c_sequencer i3c_target_sqr[TB_MAX_IBI_REQUESTERS];
     i3c_sequencer i3c_secondary_sqr;
 `endif
 `ifdef SMC_USE_I3C_RAL

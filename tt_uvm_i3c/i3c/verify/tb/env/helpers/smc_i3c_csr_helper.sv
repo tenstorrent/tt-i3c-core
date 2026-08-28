@@ -16,7 +16,7 @@
 //
 // File        : smc_i3c_csr_helper.sv
 // Description : Helper API for I3C CSR.
-// Authors     : Duy Huynh, Dang Thai
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
 // Date        : 2026-07-18
 //
 // *****************************************************************************

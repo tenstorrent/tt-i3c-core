@@ -1,5 +1,9 @@
+sim/out/
+sim/generated/
+sim/project/i3c_source.local.mk
 *.log
 *.vdb/
 *.fsdb
 *.vpd
 *.vcd
+**/.fsm.sch.verilog.xml
