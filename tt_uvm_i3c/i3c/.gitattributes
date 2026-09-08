@@ -1,0 +1,6 @@
+.gitattributes text eol=lf
+*.sh text eol=lf
+*.bash text eol=lf
+run.sh text eol=lf
+*.md text eol=lf
+sim/filelists/*.f text eol=lf

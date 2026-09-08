@@ -1,0 +1,183 @@
+// *****************************************************************************
+// SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2026 VNCHIP LABS
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// File        : i3c_ibi_base_test.sv
+// Description : Base UVM test for I3C IBI scenarios.
+// Authors     : Huynh Pham Anh Duy, Thai Hai Dang
+// Date        : 2026-07-25
+//
+// *****************************************************************************
+
+`ifndef I3C_IBI_BASE_TEST_SV
+`define I3C_IBI_BASE_TEST_SV
+
+class i3c_ibi_base_test extends i3c_base_test;
+    `uvm_component_utils(i3c_ibi_base_test)
+
+    protected i3c_ibi_dut_role_e dut_role = I3C_IBI_DUT_TARGET;
+    protected int unsigned controller_target_count = 1;
+
+    function new(string name = "i3c_ibi_base_test",
+                 uvm_component parent = null);
+        super.new(name, parent);
+    endfunction
+
+    protected function bit is_reserved_dynamic_addr(bit [6:0] addr);
+        // Mirrors i3c_pkg::is_i3c_rsvd_addr from the reviewed native core. Keeping the
+        // policy here avoids hardcoded address ranges in sequences/coverage.
+        return addr inside {[7'h00:7'h07], 7'h3e, 7'h5e, 7'h6e, 7'h76,
+                            [7'h78:7'h7f]};
+    endfunction
+
+    protected virtual function bit require_ibi_coverage_by_default();
+        return 1'b0;
+    endfunction
+
+    virtual function void build_phase(uvm_phase phase);
+        int role_plusarg;
+        int unsigned target_addr_plusarg;
+        int unsigned mdb_plusarg;
+        int unsigned timeout_plusarg;
+        int unsigned retry_plusarg;
+
+`ifdef I3C_DV_NATIVE_RTL
+        if ($value$plusargs("IBI_DUT_CONTROLLER=%0d", role_plusarg)) begin
+            case (role_plusarg)
+                0: dut_role = I3C_IBI_DUT_TARGET;
+                1: dut_role = I3C_IBI_DUT_CONTROLLER;
+                default:
+                    `uvm_fatal("IBI_ROLE",
+                               $sformatf("IBI_DUT_CONTROLLER must be 0 or 1, got %0d",
+                                         role_plusarg))
+            endcase
+        end
+        // These overrides are selected before the env builds its I3C agent.
+        i3c_dv_monitor::install_type_override();
+        if (dut_role == I3C_IBI_DUT_CONTROLLER)
+            i3c_dv_target_driver::install_type_override();
+        else begin
+            i3c_dv_host_driver::install_type_override();
+            // The primary agent remains the Host. Every auxiliary requester
+            // must use the Device-mode Target driver, including future slots
+            // 2 and 3, without requiring per-test factory plumbing.
+            for (int unsigned slot = 1;
+                 slot < controller_target_count; slot++) begin
+                i3c_dv_target_driver::install_inst_override(
+                  (slot == 1) ?
+                    "uvm_test_top.env.i3c_agt_secondary.driver" :
+                    $sformatf("uvm_test_top.env.i3c_agt_target_%0d.driver",
+                              slot));
+            end
+        end
+`endif
+
+        super.build_phase(phase);
+
+        cfg.ibi_dut_role = dut_role;
+        cfg.ibi_controller_target_count = controller_target_count;
+        if ((controller_target_count < 1) ||
+            (controller_target_count > TB_MAX_IBI_REQUESTERS))
+            `uvm_fatal("IBI_TARGET_COUNT",
+                       $sformatf("controller_target_count must be 1..%0d, got %0d",
+                                 TB_MAX_IBI_REQUESTERS,
+                                 controller_target_count))
+        cfg.require_ibi_coverage_samples =
+            require_ibi_coverage_by_default() ||
+            $test$plusargs("IBI_REQUIRE_COV");
+        cfg.require_ibi_passive_monitor_match =
+            $test$plusargs("IBI_REQUIRE_PASSIVE_MONITOR");
+
+        if ($value$plusargs("IBI_TARGET_ADDR=%h", target_addr_plusarg)) begin
+            if (target_addr_plusarg > 7'h7f)
+                `uvm_fatal("IBI_TARGET_ADDR",
+                           $sformatf("IBI_TARGET_ADDR must fit in seven bits, got 0x%0h",
+                                     target_addr_plusarg))
+            cfg.ibi_target_addr = target_addr_plusarg[6:0];
+        end
+        if (is_reserved_dynamic_addr(cfg.ibi_target_addr))
+            `uvm_fatal("IBI_TARGET_ADDR",
+                       $sformatf("IBI_TARGET_ADDR 0x%02h is reserved by I3C",
+                                 cfg.ibi_target_addr))
+        cfg.ibi_addr_class = IBI_ADDR_VALID;
+        cfg.ibi_addr_class_valid = 1'b1;
+        cfg.ibi_source_instance_by_addr[cfg.ibi_target_addr] =
+            cfg.ibi_source_instance;
+        cfg.vif.i3c_controller_expected_addr = cfg.ibi_target_addr;
+
+        if ($value$plusargs("IBI_BASIC_MDB=%h", mdb_plusarg)) begin
+            if (mdb_plusarg > 8'hff)
+                `uvm_fatal("IBI_BASIC_MDB",
+                           $sformatf("IBI_BASIC_MDB must fit in one byte, got 0x%0h",
+                                     mdb_plusarg))
+            cfg.ibi_basic_mdb = mdb_plusarg[7:0];
+        end
+        if ($value$plusargs("IBI_TIMEOUT_CYCLES=%0d", timeout_plusarg)) begin
+            if (timeout_plusarg == 0)
+                `uvm_fatal("IBI_TIMEOUT_CFG", "IBI_TIMEOUT_CYCLES must be non-zero")
+            cfg.ibi_timeout_cycles = timeout_plusarg;
+        end
+        if ($value$plusargs("IBI_RETRY_COUNT=%0d", retry_plusarg)) begin
+            if (retry_plusarg > 7)
+                `uvm_fatal("IBI_RETRY_CFG", "IBI_RETRY_COUNT must fit the 3-bit CSR field")
+            cfg.ibi_retry_count = retry_plusarg;
+        end
+
+`ifdef I3C_DV_NATIVE_RTL
+        if (!uvm_config_db#(virtual i3c_if)::get(
+                this, "", "i3c_vif", cfg.i3c_vif))
+            `uvm_fatal("IBI_VIF", "Missing i3c_vif for IBI functional test")
+        for (int unsigned slot = 1;
+             slot < cfg.ibi_controller_target_count; slot++) begin
+            if (!uvm_config_db#(virtual i3c_if)::get(
+                    this, "",
+                    $sformatf("i3c_target_vif_%0d", slot),
+                    cfg.i3c_target_vif[slot]))
+                `uvm_fatal("IBI_TARGET_VIF",
+                           $sformatf("Missing i3c_if for Target slot %0d",
+                                     slot))
+        end
+        cfg.i3c_secondary_vif = cfg.i3c_target_vif[1];
+        cfg.has_i3c_agent = 1'b1;
+        cfg.has_ibi_coverage = 1'b1;
+        cfg.has_ibi_scoreboard = (dut_role == I3C_IBI_DUT_TARGET);
+        cfg.has_ibi_controller_checker =
+            (dut_role == I3C_IBI_DUT_CONTROLLER);
+`endif
+
+        // Target-transmit tests use an independent descriptor predictor and
+        // actual-event observer. The scoreboard compares their transaction
+        // streams; coverage samples observed attempts/completions and the
+        // correlated queue/IRQ result.
+
+        `uvm_info(get_type_name(),
+                   $sformatf("IBI base test configured: DUT role=%s DA=0x%02h MDB=0x%02h timeout=%0d require_cov=%0b",
+                              (dut_role == I3C_IBI_DUT_CONTROLLER) ?
+                                "controller" : "target",
+                              cfg.ibi_target_addr,
+                              cfg.ibi_basic_mdb,
+                              cfg.ibi_timeout_cycles,
+                              cfg.require_ibi_coverage_samples),
+                   UVM_LOW)
+    endfunction
+
+    virtual function i3c_base_vseq create_vseq();
+        `uvm_fatal("IBI_BASE_ONLY",
+                   "i3c_ibi_base_test is a base class and cannot run directly")
+        return null;
+    endfunction
+endclass : i3c_ibi_base_test
+
+`endif // I3C_IBI_BASE_TEST_SV
