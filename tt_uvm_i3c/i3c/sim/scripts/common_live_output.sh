@@ -77,7 +77,7 @@ runner_live_open_output() {
     # Compact regression workers redirect stdout to console.log, but they still
     # own the interactive terminal.  Open it directly so hang/timeout notices
     # remain visible while ordinary worker output stays captured in the log.
-    if [[ -e /dev/tty && -w /dev/tty ]]; then
+    if [[ -t 1 && -e /dev/tty && -w /dev/tty ]]; then
         exec {RUNNER_LIVE_OUTPUT_FD}>/dev/tty 2>/dev/null || RUNNER_LIVE_OUTPUT_FD=''
     fi
 }

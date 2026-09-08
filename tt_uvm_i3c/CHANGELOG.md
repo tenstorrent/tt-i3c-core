@@ -6,22 +6,37 @@ history remains the authoritative source for detailed commit-level changes.
 The development milestones below describe the resulting package capability,
 not every intermediate debug or implementation change.
 
+## 2026-09-05 — Customer IBI Regression Restoration
+
+### Added
+
+- Restored the eight public customer testcase identities as generic
+  compatibility wrappers. They preserve historical test/result-database names
+  while delegating stimulus and checking to canonical Target-TX and
+  Controller-RX engines; they are not independent signoff claims.
+- Reused the native multi-requester arbitration, HCI/DAT, FIFO/IRQ, scoreboard,
+  SVA, and coverage infrastructure. The restored entries are directed, one
+  seed each, and remain `Pending` until native qualification evidence exists.
+- Renamed the prior local controller-prefixed recovery implementation to the
+  exact public contract `i3c_ibi_multi_target_recovery_test` while retaining
+  its canonical multi-target followed by recovery-cleanup sequence.
+
 ## 2026-07-02 to 2026-07-20 — Initial Verification Environment
 
 ### Added
 
 - Established the UVM environment and the initial SVA and functional-coverage
   framework for the peripherals verification context.
-- Integrated the externally supplied TT I3C RTL and its recursive Caliptra
-  dependency without copying either RTL source tree into this package.
-- Added source-root selection, revision checking, and the initial pinned-source
-  contract used by compile and simulation flows.
+- Integrated the native TT I3C RTL from the containing repository and its
+  recursive Caliptra dependency without copying either RTL source tree into
+  this package.
+- Added source-root selection, revision checking, and the initial reviewed-
+  source contract used by compile and simulation flows.
 - Integrated the AXI4-Lite VIP as the CSR/HCI frontdoor and added the initial
   I3C bus VIP connection.
-- Integrated the generated `I3CCSR_uvm` model supplied by the selected I3C
-  checkout. The package provides the OCAH compatibility root, AXI4-Lite
-  adapter, helper services, and passive predictor; it does not own the
-  generated leaf register model.
+- Integrated the generated `I3CCSR_uvm` model supplied by the containing native
+  source. The package provides a generic AXI4-Lite adapter, helper services,
+  and passive predictor; it does not own the generated leaf register model.
 - Adapted the generated RAL hierarchy to a 32-bit little-endian AXI4-Lite root
   map while retaining the generated I3C subblocks and DAT/DCT submaps.
 - Added CSR smoke and all-register audit flows, a reusable CSR scoreboard, and
@@ -59,8 +74,8 @@ not every intermediate debug or implementation change.
   content, HCI response data, queue state, and interrupt state.
 - Improved event synchronization so START, ACK, completion, queue, IRQ, reset,
   and recovery evidence is sampled deterministically.
-- Added multi-target Controller-RX ordering, ACK/NACK, recovery, and queue
-  behavior checks.
+- Added canonical Controller-RX multi-target ordering/arbitration, policy,
+  FIFO/IRQ, and subsequent recovery-cleanup checks.
 
 ## 2026-08-07 to 2026-08-19 — Stress, Recovery, and Multi-Target
 
@@ -76,8 +91,9 @@ not every intermediate debug or implementation change.
   cleanup scenarios.
 - Expanded the environment to four simultaneous IBI requester slots and added
   directed four-requester and grouped multi-target arbitration scenarios.
-- Added loser-release, single-owner, DUT-win/DUT-loss, ordering, and recovery
-  checks for multi-target arbitration.
+- Added loser-release, single-owner, DUT-win/DUT-loss, and ordering checks for
+  multi-target arbitration; recovery cleanup remains a subsequent canonical
+  scenario rather than live-arbitration injection.
 
 ## 2026-07-02 to 2026-08-19 — SVA, Coverage, and Verification Closure
 
@@ -101,7 +117,7 @@ not every intermediate debug or implementation change.
   functional-group coverage. Generic AXI/CSR boundary and non-IBI objects are
   not included in the IBI qualification denominator.
 - Removed unreachable or unsupported bins from the claimed IBI model where the
-  pinned architecture cannot produce the represented state. This is scope
+  reviewed native architecture cannot produce the represented state. This is scope
   alignment, not a waiver of reachable IBI behavior.
 - Added coverage collection and merge support with source/case provenance and
   checks for required coverage sampling.
@@ -110,12 +126,12 @@ not every intermediate debug or implementation change.
 
 - The authoritative candidate inventory is maintained in
   `docs/release/RELEASE_MANIFEST.md`.
-- Documented accepted IBI without MDB as unsupported by the pinned and reviewed
+- Documented accepted IBI without MDB as unsupported by the reviewed native
   Target/Controller RTL paths; it remains outside measured closure rather than
   being waived or synthetically stimulated.
 - Code coverage is intentionally outside the IBI-focused qualification target;
   the required scored metrics are assertion and functional-group coverage.
-- Final pinned-source regression, merged coverage, and HVP review evidence are
+- Final reviewed-source regression, merged coverage, and HVP review evidence are
   still pending and must not be represented as completed signoff.
 
 ## 2026-07-17 to 2026-08-20 — Regression and Automation Infrastructure
@@ -162,13 +178,13 @@ not every intermediate debug or implementation change.
 
 - Prepared `tt_uvm_i3c` as a standalone IBI-focused UVM delivery with a public
   package-root `run.sh` entry point.
-- Added explicit pinned, latest, and reviewed-worktree source policies. Pinned
-  mode requires the recorded TT I3C and Caliptra revisions and clean source
-  state for qualification evidence.
+- Added explicit reviewed, latest, and reviewed-worktree source policies. The
+  reviewed policy requires recorded TT I3C and Caliptra revisions and clean
+  source state for qualification evidence.
 - Added standalone source checks, package self-checks, compile/regression/
   coverage qualification instructions, and release-manifest requirements.
-- Bundled the UVM 2020.3.1 fallback while keeping TT I3C and Caliptra RTL as
-  external pinned inputs.
+- Bundled the UVM 2020.3.1 fallback while consuming TT I3C RTL from the
+  containing repository and retaining Caliptra as a documented dependency.
 - Added third-party provenance, SPDX/header audit, LICENSE and NOTICE material,
   architecture and source-baseline documents, release notes, known-issue
   disposition, qualification procedure, and release manifest.
@@ -180,33 +196,37 @@ not every intermediate debug or implementation change.
 
 ### Changed
 
-- Retained internal `smc_*` class and package names to preserve compatibility
-  with the verified OCAH source lineage; they do not create a runtime dependency
-  on the original OCAH tree.
+- The earlier handoff retained legacy source-lineage names for compatibility.
+  The current active package has generic I3C namespaces and no runtime
+  dependency on the retired integration tree.
 - Standardized VNCHIP authorship and third-party provenance without claiming
   ownership of upstream UVM, I3C VIP, or generated I3C RAL sources.
 
-## Handoff Baseline
+## Historical Handoff Baseline
+
+The following table records the 2026-08-20 handoff snapshot. Its branch and
+standalone-source revision are historical provenance, not the identity of the
+current candidate checkout. For the active candidate branch, source HEAD, and
+qualification state, see [the release manifest](docs/release/RELEASE_MANIFEST.md).
 
 | Field | Baseline |
 |---|---|
 | Handoff date | 2026-08-20 |
 | Package | `tt_uvm_i3c` |
 | Status | **Candidate — not yet qualified** |
-| UVM branch | `feature/tt_uvm_i3c` |
-| Standalone source baseline commit | `f50e0adbd02fbd1148a5eb6ba136082980ca0912` |
+| Historical UVM branch | `feature/uvm_i3c_cleanup` |
+| Historical standalone source baseline commit | `f50e0adbd02fbd1148a5eb6ba136082980ca0912` |
 | Final delivery commit/tag | **PENDING release packaging and approval** |
-| TT I3C branch | `tt/main` |
-| TT I3C revision | `a6361105cd3432699da636f1f5e6f1eb4df09ed2` |
-| Caliptra revision | `a4582f5856136286d2389b1cfa8de2910a82fe5e` |
+| Native TT I3C source root | Containing repository by default; optional `I3C_ROOT_DIR` override |
+| Native Caliptra source root | Selected by `CALIPTRA_ROOT` |
 | UVM library | Bundled UVM 2020.3.1 fallback |
 | Coverage scope | IBI assertion and functional-group coverage; code coverage excluded |
-| Qualification evidence | Pinned compile, full enabled regression, merged assert/group coverage, and verification-plan review **PENDING** |
+| Qualification evidence | Native compile, full enabled regression, merged assert/group coverage, and verification-plan review **PENDING** |
 
-The machine-readable source authority is
-`i3c/sim/project/i3c_source_pins.mk`. The release owner must update
-`docs/release/RELEASE_MANIFEST.md` with immutable artifacts and approval before this
-candidate is described as qualified.
+The machine-readable native compile authority is `${I3C_ROOT_DIR}/src/i3c.f`,
+with the recursive Caliptra dependency selected by `CALIPTRA_ROOT`. The release
+owner must update `docs/release/RELEASE_MANIFEST.md` with immutable artifacts
+and approval before this candidate is described as qualified.
 
 ## Known Limitations
 
@@ -214,16 +234,16 @@ candidate is described as qualified.
   by `docs/verification/VERIFICATION_PLAN.md`; this package does not claim
   full I3C protocol or full-core functional coverage.
 - The Controller HCI `SOFT_RST` self-clear reproduction is disabled because the
-  pinned RTL does not implement the tested self-clearing behavior.
+  reviewed RTL does not implement the tested self-clearing behavior.
 - The generated DAT and DCT memories are inventoried but are not frontdoor
   tested. Their 64/128-bit entries require a dedicated split-transaction
   sequence over the current 32-bit AXI4-Lite adapter.
-- No-MDB IBI behavior is outside the current pinned design contract; the
+- No-MDB IBI behavior is outside the current reviewed design contract; the
   documented IBI path requires an MDB and the unsupported state is not claimed
   as covered.
 - The delivered execution flow currently targets Synopsys VCS. Final release
   qualification evidence for the selected VCS version is still pending; other
   simulators and tool versions are not claimed until separately validated.
-- The candidate has not completed the pinned-source qualification procedure;
+- The candidate has not completed the native-source qualification procedure;
   passing test and coverage percentages must be taken from the final immutable
   qualification artifacts rather than inferred from the static inventory.

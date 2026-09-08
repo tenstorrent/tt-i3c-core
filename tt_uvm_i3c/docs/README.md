@@ -32,6 +32,6 @@ README files.
 | Document | Purpose |
 |---|---|
 | [Release manifest](release/RELEASE_MANIFEST.md) | Evidence checklist |
-| [Source baseline](release/SOURCE_BASELINE.md) | External source revisions |
+| [Source baseline](release/SOURCE_BASELINE.md) | Native source and dependency revisions |
 | [Header audit](release/audit/HEADER_AUDIT.md) | Packaging/header evidence for release review |
 | [Third-party inventory](THIRD_PARTY.md) | Dependency provenance and licenses |

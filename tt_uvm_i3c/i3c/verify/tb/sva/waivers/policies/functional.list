@@ -1,4 +1,4 @@
-# SVA waiver keys for the "functional" policy (smc_peripherals).
+# SVA waiver keys for the "functional" policy (i3c).
 # One key per line; blank lines and #-comments ignored. Each key K becomes a
 # +SVA_WAIVE_<K> plusarg at run time.
 #

@@ -22,8 +22,6 @@ runner_report_command_start() {
     runner_panel_value Command "$command"
     runner_panel_value Project "${DV_PROJECT_NAME:-unknown}"
     runner_panel_value Simulator "${DV_SIMULATOR:-unknown}"
-    runner_panel_value "DUT Mode" "${DV_DUT_MODE:-unknown}"
-    runner_panel_value "Source Mode" "${DV_SOURCE_MODE:-unknown}"
     runner_panel_value Started "$(runner_display_time)"
     runner_panel_value Arguments "$(runner_command_string "$@")"
     runner_panel_end
@@ -63,8 +61,6 @@ runner_report_compile_plan() {
     runner_panel_begin "Compile Execution Plan"
     runner_panel_value "Run ID" "$run_id"
     runner_panel_value Project "${DV_PROJECT_NAME:-unknown}"
-    runner_panel_value "DUT Mode" "${DV_DUT_MODE:-unknown}"
-    runner_panel_value "Source Mode" "${DV_SOURCE_MODE:-unknown}"
     runner_panel_value Top "${DV_TOP:-unknown}"
     runner_panel_value Filelist "$FILELIST"
     runner_panel_value "Filelist Entries" "$entries"
@@ -324,7 +320,13 @@ runner_report_dump_format() {
 
 runner_html_escape() {
     local value="${1:-}" restore_patsub=0
-    shopt -q patsub_replacement && { restore_patsub=1; shopt -u patsub_replacement; }
+    # Bash 5.1 (still common on VCS hosts) does not know the optional
+    # patsub_replacement setting introduced later.  Probe quietly so report
+    # generation never turns an otherwise useful diagnostic into shell noise.
+    if shopt -q patsub_replacement 2>/dev/null; then
+        restore_patsub=1
+        shopt -u patsub_replacement
+    fi
     value="${value//&/&amp;}"; value="${value//</&lt;}"; value="${value//>/&gt;}"
     value="${value//\"/&quot;}"; value="${value//\'/&#39;}"
     ((restore_patsub == 0)) || shopt -s patsub_replacement

@@ -1,4 +1,4 @@
-# Global SVA waiver keys for smc_peripherals (applied to every test).
+# Global SVA waiver keys for i3c (applied to every test).
 # One key per line; blank lines and #-comments ignored. Each key K becomes a
 # +SVA_WAIVE_<K> plusarg at run time.
 #

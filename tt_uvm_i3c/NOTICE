@@ -17,5 +17,6 @@ The bundled UVM 2020.3.1 reference implementation is distributed under its
 original Apache-2.0 license and notices. See
 third_party/uvm-core-2020.3.1/LICENSE.txt and NOTICE.txt.
 
-The Tenstorrent I3C RTL is not included in this directory. Its license and
-notices are supplied by the separately selected I3C core checkout.
+The Tenstorrent I3C RTL is consumed from the containing repository and is not
+included in this package directory. Its license and notices remain with the
+containing source tree.

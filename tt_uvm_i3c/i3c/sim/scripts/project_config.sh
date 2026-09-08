@@ -58,8 +58,6 @@ runner_project_load() {
     export DV_VERDI_WORK_DIR="${DV_VERDI_WORK_DIR:-}"
     export DV_VERDI_SOURCE_OPTS="${DV_VERDI_SOURCE_OPTS:-}"
     export DV_DEFAULT_PLUSARGS="${DV_DEFAULT_PLUSARGS:-}"
-    export DV_DUT_MODE="${DV_DUT_MODE:-${DUT_MODE:-rtl}}"
-    export DV_SOURCE_MODE="${DV_SOURCE_MODE:-${SOURCE_MODE:-project}}"
     export DV_REQUIRE_UVM_SUMMARY="${DV_REQUIRE_UVM_SUMMARY:-1}"
     export DV_PASS_REGEX="${DV_PASS_REGEX:-UVM Report Summary|UVM_REPORT_SUMMARY|UVM/REPORT/(SERVER|CATCHER)}"
     export DV_COV_WAIVER_CANDIDATE_NAME="${DV_COV_WAIVER_CANDIDATE_NAME:-coverage_filter.candidate.el}"

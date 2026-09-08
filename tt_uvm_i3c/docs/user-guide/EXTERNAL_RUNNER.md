@@ -17,29 +17,30 @@ The confirmed reference configuration is:
 
 | Item | Value |
 |---|---|
-| Simulation top | `tb_smc_peripherals_top` |
+| Simulation top | `tb_i3c_top` |
 | Generated compile filelist | `i3c/sim/generated/compile.f` |
 | Filelist generator | `i3c/sim/project/generate_dv_inputs.sh` |
 | Authoritative test grouping | `i3c/sim/filelists/test.f` |
 | Generated normalized plan | `i3c/sim/generated/testplan.dv` |
-| External DUT filelist | `${I3C_ROOT_DIR}/src/i3c.f` |
+| Native DUT filelist | `${I3C_ROOT_DIR}/src/i3c.f` |
 | UVM baseline | Accellera UVM 2020.3.1 |
 | UVM register width | `UVM_REG_DATA_WIDTH=128` |
-| RTL-mode defines | `SMC_USE_I3C_RTL`, `SMC_USE_I3C_RAL` |
+| Native compile defines | `I3C_DV_NATIVE_RTL`, `I3C_DV_NATIVE_RAL` |
 | IBI closure metrics | `assert,group` |
 
 The generated inputs are not versioned release sources. Generate them after
-selecting the external DUT and Caliptra checkouts:
+the runner discovers the containing repository's native DUT source and after
+selecting a valid Caliptra dependency. Set `I3C_ROOT_DIR` only for a non-ancestor
+integration layout:
 
 ```bash
-export I3C_ROOT_DIR=/path/to/tt-i3c-core
 export CALIPTRA_ROOT=/path/to/caliptra-rtl
 i3c/sim/project/generate_dv_inputs.sh
 ```
 
-The source revisions and validation policy are defined by
-`docs/release/SOURCE_BASELINE.md` and `i3c/sim/project/i3c_source_pins.mk`. External
-automation must not replace those reviewed revisions silently.
+The containing repository's `src/i3c.f` is the sole DUT compile authority.
+External automation must record the native source revision used for each run
+and must not silently substitute another source root.
 
 ## Test and Runtime Contract
 

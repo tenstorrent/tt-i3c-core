@@ -20,10 +20,7 @@ require_file "$PACKAGE_ROOT/NOTICE"
 require_file "$PACKAGE_ROOT/run.sh"
 require_file "$PROJECT_ROOT/verify/vip/axi4lite_vip/axi4lite_vip_pkg.sv"
 require_file "$PROJECT_ROOT/verify/vip/i3c_vip/i3c_vip_pkg.sv"
-require_file "$PROJECT_ROOT/rtl/wrappers/smc_i3c_axi_adapter.sv"
-require_file "$PROJECT_ROOT/rtl/wrappers/smc_i3c_wrapper.sv"
-
-forbidden_pattern='/VNCHIP/|/home/[A-Za-z0-9_.-]+/|git\.vnchip|smc_shared|OCAH_DEPS_ROOT|ocah_local_env|env[[:space:]]+ocah'
+forbidden_pattern='/VNCHIP/|/home/[A-Za-z0-9_.-]+/|git\.vnchip'
 runtime_files=()
 while IFS= read -r -d '' runtime_file; do
     runtime_files+=("$runtime_file")
@@ -33,12 +30,11 @@ done < <(
         -type f \
         \( -name '*.sh' -o -name '*.bash' -o -name '*.mk' -o \
            -name '*.f' -o -name 'Makefile' \) \
-        ! -path "$PROJECT_ROOT/sim/project/i3c_source.local.mk" \
         ! -name 'check_standalone.sh' -print0
 )
 if ((${#runtime_files[@]} > 0)) &&
    grep -En "$forbidden_pattern" "${runtime_files[@]}" >/dev/null 2>&1; then
-    printf '[ERROR] Host- or OCAH-specific runtime path remains in the standalone package\n' >&2
+    printf '[ERROR] Host-specific runtime path remains in the standalone package\n' >&2
     grep -En "$forbidden_pattern" "${runtime_files[@]}" >&2 || true
     failures=1
 fi

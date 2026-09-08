@@ -166,14 +166,6 @@ runner_dispatch_command() {
         stop-jobs) runner_stop_jobs ;;
         doctor|check) runner_check_config ;;
         self-test) runner_self_test ;;
-        source)
-            if declare -F dv_project_source_command >/dev/null 2>&1; then
-                dv_project_source_command "$@"
-            else
-                runner_error "Project does not define source management"
-                return 2
-            fi
-            ;;
         clean) runner_clean "$@" ;;
         *)
             runner_error "Unknown command: $command"
@@ -187,7 +179,7 @@ runner_dispatch() {
     local command="${1:-help}" start rc=0
     local -a original=("$@")
     case "$command" in
-        help|-h|--help|completion|--link|link-completion|source|list-tests)
+        help|-h|--help|completion|--link|link-completion|list-tests)
             runner_dispatch_command "${original[@]}"
             return $?
             ;;

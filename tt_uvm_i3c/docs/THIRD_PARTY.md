@@ -50,9 +50,13 @@ VNCHIP packaging ownership and its CHIPS Alliance lineage through the TT fork.
 Existing
 lowRISC/OpenTitan headers are unchanged.
 
-## External RTL
+## Native RTL and dependencies
 
-TT I3C RTL and recursive Caliptra RTL are not distributed in this package.
-They are selected through `I3C_ROOT_DIR` and `CALIPTRA_ROOT`; exact reviewed
-pins are in `i3c/sim/project/i3c_source_pins.mk`. Their licenses and notices
-remain the responsibility of their source checkouts and the release owner.
+TT I3C RTL is consumed from the containing repository and recursive Caliptra
+RTL is resolved as a dependency; neither source tree is distributed in this
+package. The runner resolves the native TT I3C source from the containing
+repository's `src/i3c.f`; `I3C_ROOT_DIR` is only an override for a non-ancestor
+integration layout. `CALIPTRA_ROOT` selects the recursive dependency when it is
+not at the documented default. The native `src/i3c.f` is the compile authority.
+Their licenses and notices remain the responsibility of the source trees and
+the release owner.

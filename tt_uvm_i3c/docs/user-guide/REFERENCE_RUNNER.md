@@ -205,19 +205,17 @@ and the simulation-log path for every case. `summary/failures.log` is the short
 index of failed cases only. The coverage summary links to both execution logs;
 an iteration with no failures is still retained in the complete regression log.
 
-SMC I3C coverage builds are intentionally IBI-only: the backend compiles with
-`SMC_I3C_IBI_COVERAGE_ONLY`, applies `sim/scripts/cov_setup.cfg`, and collects
-only IBI-prefixed testplan entries for coverage closure. Smoke and RAL entries
+I3C coverage builds are intentionally IBI-only: the backend selects the VCS
+`assert` metric, applies `sim/scripts/cov_setup.cfg`, and collects only
+IBI-prefixed testplan entries for coverage closure. Smoke and RAL entries
 remain enabled for ordinary regressions. The project requires only the URG
 `ASSERT` and `GROUP` columns: the backend collects only the VCS `assert` metric
 plus UVM functional covergroups. RTL line, condition, toggle, FSM, and branch
 coverage are disabled for this closure run.
 
-`smc_i3c_boundary_sva` is also outside the IBI coverage denominator. Its five
-stability assertions require directed AXI backpressure and its two denied-access
-assertions require `access_allow=0`; those are owned by a separate AXI/CSR
-boundary verification scope. The module remains available in ordinary
-non-coverage builds and is not waived or counted as IBI evidence.
+AXI/CSR boundary policy is outside the IBI coverage denominator and is not
+claimed by this runner. The native wrapper and adapter remain part of every
+functional compile.
 
 - `metadata/run.meta`, `metadata/compile.meta`, and replayable command files;
 - compile metadata records the exact top, filelist, compile working directory,

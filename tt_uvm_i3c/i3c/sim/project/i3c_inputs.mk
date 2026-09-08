@@ -21,11 +21,6 @@ emit-compile-filelist:
 	@$(foreach item,$(ORDERED_PKG_SRC_FILES),printf '%s\n' '$(item)';)
 	@$(foreach item,$(SVA_SRC_FILES),printf '%s\n' '$(item)';)
 	@$(foreach item,$(TB_TOP_SRC_FILES),printf '%s\n' '$(item)';)
-	@if [[ "$(DUT_MODE)" == "rtl" ]]; then \
-		printf '%s\n' '-f $${I3C_ROOT_DIR}/src/i3c.f'; \
-		printf '%s\n' '$(PROJECT_ROOT)/rtl/wrappers/smc_i3c_axi_adapter.sv'; \
-		printf '%s\n' '$(PROJECT_ROOT)/rtl/wrappers/smc_i3c_wrapper.sv'; \
-		printf '%s\n' '$(PROJECT_ROOT)/rtl/smc_peripherals_top.sv'; \
-	else \
-		printf '%s\n' '$(PROJECT_ROOT)/rtl/smc_peripherals_stub.sv'; \
-	fi
+	printf '%s\n' '-f $${I3C_ROOT_DIR}/src/i3c.f'; \
+	printf '%s\n' '$(PROJECT_ROOT)/verify/tb/adapters/i3c_dv_axi_adapter.sv'; \
+	printf '%s\n' '$(PROJECT_ROOT)/verify/tb/wrappers/i3c_dv_wrapper.sv'

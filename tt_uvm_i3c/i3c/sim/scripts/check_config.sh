@@ -64,7 +64,7 @@ runner_check_config() {
         fi
     fi
 
-    local forbidden='u''art|i''3c|i''2c|h''ci|s''mc|a''ou' core_file violations
+    local forbidden='u''art|i''2c|h''ci|a''ou' core_file violations
     local -a core_paths=()
     while IFS= read -r core_file; do
         [[ -z "$core_file" || "$core_file" == \#* ]] || core_paths+=("$RUNNER_ROOT/$core_file")

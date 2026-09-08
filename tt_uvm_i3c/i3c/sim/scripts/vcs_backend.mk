@@ -76,7 +76,7 @@ COV_GROUP_DB_EDIT_FILE ?= $(RUNNER_ROOT)/sim/scripts/ibi_group_db_edit.cfg
 # covergroup data. RTL code metrics are intentionally disabled. Hierarchy
 # filtering is compile-time only; simv receives the matching assertion metric
 # without -cm_hier.
-COMPILE_COV_OPTS ?= +define+SMC_I3C_IBI_COVERAGE_ONLY -cm assert -cm_assert_hier $(COV_HIER_FILE) -cm_dir $(COMPILE_COV_DIR) -cm_name $(COMPILE_COV_NAME)
+COMPILE_COV_OPTS ?= -cm assert -cm_assert_hier $(COV_HIER_FILE) -cm_dir $(COMPILE_COV_DIR) -cm_name $(COMPILE_COV_NAME)
 RUN_COV_OPTS ?= -cm assert -cm_dir $(COV_DIR)/$(TEST)_$(SEED)_attempt_$(ATTEMPT).vdb -cm_name $(TEST)_$(SEED)_A$(ATTEMPT)
 DUMP_FILE ?= $(DUMP_DIR)/$(TEST)_seed_$(SEED)_attempt_$(ATTEMPT).$(DUMP_FORMAT)
 DUMP_RUN_OPTS ?= $(if $(filter legacy_fsdb,$(DV_DUMP_RUN_STYLE)),$(if $(filter fsdb,$(DUMP_FORMAT)),+DUMP +fsdb+autoflush +FSDB_FILE=$(DUMP_FILE),),$(if $(filter fsdb,$(DUMP_FORMAT)),+fsdb+autoflush,) +DV_DUMP_FORMAT=$(DUMP_FORMAT) +DV_DUMP_DIR=$(DUMP_DIR) +DV_DUMP_FILE=$(DUMP_FILE))

@@ -21,14 +21,14 @@
 //
 // *****************************************************************************
 
-class smc_i3c_axi4lite_reg_adapter #(
+class i3c_axi4lite_reg_adapter #(
     int ADDR_WIDTH = TB_ADDR_WIDTH,
     int DATA_WIDTH = TB_DATA_WIDTH
 ) extends uvm_reg_adapter;
 
-    `uvm_object_param_utils(smc_i3c_axi4lite_reg_adapter #(ADDR_WIDTH, DATA_WIDTH))
+    `uvm_object_param_utils(i3c_axi4lite_reg_adapter #(ADDR_WIDTH, DATA_WIDTH))
 
-    function new(string name = "smc_i3c_axi4lite_reg_adapter");
+    function new(string name = "i3c_axi4lite_reg_adapter");
         super.new(name);
         supports_byte_enable = 1;
         provides_responses = 0;
@@ -57,7 +57,7 @@ class smc_i3c_axi4lite_reg_adapter #(
         axi4lite_item #(ADDR_WIDTH, DATA_WIDTH) item;
 
         if (!$cast(item, bus_item)) begin
-            `uvm_fatal("SMC_I3C_RAL_ADAPTER",
+            `uvm_fatal("I3C_RAL_ADAPTER",
                        "bus2reg expected an axi4lite_item")
             return;
         end
@@ -66,4 +66,4 @@ class smc_i3c_axi4lite_reg_adapter #(
         rw.data = item.write ? item.data : item.rdata;
         rw.status = (item.resp == 2'b00) ? UVM_IS_OK : UVM_NOT_OK;
     endfunction
-endclass : smc_i3c_axi4lite_reg_adapter
+endclass : i3c_axi4lite_reg_adapter

@@ -8,10 +8,11 @@ DUT-Controller receive (Controller-RX) roles. It provides stimulus, protocol
 VIP, AXI4-Lite register access, RAL integration, predictors, scoreboards, SVA,
 functional coverage, and a verification plan.
 
-The TT I3C DUT RTL and its recursive Caliptra dependency are maintained in
-external repositories and are not distributed here. This handoff records the
-external revisions required for reproducible candidate qualification. It does
-not claim verification of the complete I3C protocol or complete DUT.
+The TT I3C DUT RTL is consumed from the containing repository; its recursive
+Caliptra dependency is resolved from the configured dependency root and is not
+distributed here. This handoff records the native and dependency revisions
+required for reproducible candidate qualification. It does not claim
+verification of the complete I3C protocol or complete DUT.
 
 The bundled Bash runner reproduces the reference compile, test, regression,
 waveform, and IBI coverage flows. It is optional automation and is not a
@@ -31,8 +32,8 @@ orchestration framework.
   response descriptors, queue/FIFO state, interrupt behavior, and reset/flush.
 - IBI timing at idle, after normal transfer, and during activity that requires
   deferral.
-- Multi-target/requester ordering, arbitration, DUT win/loss, queue pressure,
-  and recovery.
+- Multi-target/requester ordering, arbitration, and DUT win/loss, plus
+  canonical queue/FIFO/IRQ and recovery-cleanup scenarios.
 - Directed, constrained-random, multi-seed, stress, and reset scenarios.
 - Passive IBI protocol/role SVA and IBI-focused functional coverage mapped to
   the [Verification plan](docs/verification/VERIFICATION_PLAN.md).
@@ -52,7 +53,7 @@ orchestration framework.
 .
 ├── docs/                    # Central documentation, evidence, and provenance
 ├── i3c/
-│   ├── rtl/                 # Local wrapper/adapter and external-core hook
+│   ├── rtl/                 # Reserved for project-local RTL (native core is resolved from the containing repository)
 │   ├── sim/                 # Reference VCS flow, test plan, and generated inputs
 │   └── verify/              # UVM TB, RAL integration, SVA, coverage, and VIP
 ├── third_party/             # Bundled Accellera UVM 2020.3.1
@@ -69,13 +70,11 @@ release sources.
 
 The environment contains AXI4-Lite and I3C stimulus paths, passive RAL
 prediction, role-specific IBI scoreboards, SVA, and functional coverage. The
-reference top is `tb_smc_peripherals_top`; the external DUT sources enter
-through `${I3C_ROOT_DIR}/src/i3c.f`.
+reference top is `tb_i3c_top`; the native DUT sources enter through
+`${I3C_ROOT_DIR}/src/i3c.f`.
 
 See [Architecture](docs/user-guide/ARCHITECTURE.md) for the UVM architecture,
-DUT wrapper, interface connectivity, build guards, portable layer, and
-integration details. Customer-specific wrapper mappings require separate
-integration qualification when the delivered wrapper is not reused.
+native wrapper, interface connectivity, and integration details.
 
 ## Prerequisites and Dependencies
 
@@ -86,13 +85,13 @@ integration qualification when the delivered wrapper is not reused.
 - Accellera UVM 2020.3.1 is bundled under
   `third_party/uvm-core-2020.3.1/`.
 - AXI4-Lite and I3C VIP sources are delivered under `i3c/verify/vip/`.
-- TT I3C and Caliptra RTL remain external.
+- TT I3C RTL is consumed from the containing repository; Caliptra RTL remains a
+  documented dependency.
 
 | Variable | Purpose | Default/requirement |
 |---|---|---|
-| `I3C_ROOT_DIR` | External TT I3C checkout | Required for RTL mode |
+| `I3C_ROOT_DIR` | Optional native TT I3C root override | Auto-discovered by walking upward to a containing `src/i3c.f`; an override must contain `src/i3c.f` |
 | `CALIPTRA_ROOT` | Caliptra checkout | `${I3C_ROOT_DIR}/third_party/caliptra-rtl` when available |
-| `SOURCE_MODE` | Source validation policy | `pinned` for qualification |
 | `DV_UVM_HOME` | UVM source root | Bundled UVM 2020.3.1 |
 
 See [Third-party software](docs/THIRD_PARTY.md) and
@@ -104,22 +103,22 @@ Run commands from the package root. Tool module names are installation
 specific.
 
 ```bash
-export I3C_ROOT_DIR=/path/to/tt-i3c-core
 export CALIPTRA_ROOT=/path/to/caliptra-rtl
-source ./run.sh env tt
 ./run.sh generate
-./run.sh doctor --source-mode pinned
+./run.sh doctor
 ./run.sh compile --show-output
 ```
 
-`CALIPTRA_ROOT` may be omitted when the required checkout is available at
-`${I3C_ROOT_DIR}/third_party/caliptra-rtl`.
+The runner discovers `I3C_ROOT_DIR` from the containing repository. Set it only
+when the package is being integrated from a workspace where the native source
+root is not an ancestor. `CALIPTRA_ROOT` may be omitted when the required
+dependency is available at `${I3C_ROOT_DIR}/third_party/caliptra-rtl`.
 
 Run smoke and an IBI feature test:
 
 ```bash
-./run.sh test -t smc_i3c_csr_smoke_test --show-output
-./run.sh test -t smc_i3c_ibi_target_tx_basic_test --show-output
+./run.sh test -t i3c_csr_smoke_test --show-output
+./run.sh test -t i3c_ibi_target_tx_basic_test --show-output
 ```
 
 Run one planned case or the enabled regression:
@@ -143,6 +142,12 @@ Test and coverage counts are authoritative only in
 [Release manifest](docs/release/RELEASE_MANIFEST.md). Requirement-to-test and
 coverage mappings are defined by the
 [Verification plan](docs/verification/VERIFICATION_PLAN.md).
+
+The eight historical customer scenario names remain in the plan as
+compatibility identities. The retry-limit identity is explicitly single-
+requester; the other multi-target identities delegate to canonical engines.
+Their canonical engines and evidence sources are listed in Verification Plan
+Section 5.0; a wrapper name alone is not an additional signoff claim.
 
 ## Common Configuration
 
@@ -206,7 +211,11 @@ issue list and disposition.
 See [Reference runner](docs/user-guide/REFERENCE_RUNNER.md) for log, waveform,
 retry, HTML summary, coverage, and artifact-navigation details.
 
-## Handoff Baseline
+## Historical Handoff Baseline
+
+This is the 2026-08-20 handoff snapshot. It is retained for provenance and is
+not the current candidate identity; see the [release manifest](docs/release/RELEASE_MANIFEST.md)
+for the active branch, source HEAD, and qualification state.
 
 ```text
 Status: Candidate — not yet qualified
@@ -216,8 +225,8 @@ Qualification status: see docs/release/RELEASE_MANIFEST.md
 UVM baseline: Accellera UVM 2020.3.1
 ```
 
-Git commit or release tag is the package identity. Qualification requires
-`SOURCE_MODE=pinned` and clean external checkouts.
+Git commit or release tag is the package identity. Qualification requires the
+native source root resolved by `I3C_ROOT_DIR` to be reviewed and clean.
 
 ## Documentation
 

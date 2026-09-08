@@ -6,7 +6,6 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 BLACKBOX_VSEQ_DIRS=(
   "${ROOT_DIR}/verify/tb/vseq/core"
-  "${ROOT_DIR}/verify/tb/vseq/integration/portable"
 )
 
 forbidden_pattern='get_ral_model_handle|ral_model\.|uvm_hdl_|DUT_HDL_PATH|TB_TOP_HDL_PATH'

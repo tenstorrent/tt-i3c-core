@@ -13,9 +13,12 @@ runner_self_test() (
 
     runner_info "Starting tool-independent runner self-test"
     # The runner qualification suite uses dry-run fixtures and must not require
-    # an external RTL checkout or simulator installation.
-    export DUT_MODE=stub
+    # a native RTL source root or simulator installation.
     [[ -d "$(runner_out_dir)" ]] && runner_clean --all || true
+    # A configured project preflight intentionally checks native RTL, Caliptra,
+    # and simulator availability.  Those are outside this tool-independent
+    # fixture suite; generic config/schema checks still run below.
+    runner_project_preflight() { return 0; }
     runner_check_config || return $?
 
     local report_project_prefix="${RUNNER_ROOT#"$RUNNER_REPORT_ROOT/"}"
@@ -141,10 +144,8 @@ runner_self_test() (
             STATE_DIR="$fsdb_plan_root/state" RUNS_DIR="$fsdb_plan_root/runs" \
             DUMP_FORMAT=none
     )" || return $?
-    runner_self_test_assert "grep -q -- '+define+SMC_I3C_IBI_COVERAGE_ONLY' <<< \"\$cov_plan\"" \
-        "coverage compile selects the IBI-only elaboration" || return $?
     runner_self_test_assert "grep -q -- '-cm assert -cm_assert_hier .*sim/scripts/cov_setup.cfg' <<< \"\$cov_plan\"" \
-        "coverage compile applies the IBI SVA hierarchy filter" || return $?
+        "coverage compile selects IBI assertion metrics and applies the hierarchy filter" || return $?
     runner_self_test_assert "! grep -Eq -- '-cm [^ ]*(line|cond|tgl|fsm|branch)' <<< \"\$cov_plan\"" \
         "IBI coverage compile disables RTL code metrics" || return $?
     cov_merge_plan="$(
@@ -479,7 +480,7 @@ EOF
         "coverage closure policy identifies run-once tests" || return $?
 
     local -a fixture_tests=() regression_selectors=()
-    mapfile -t fixture_tests < <(awk -F'|' '/^#[[:space:]]*DV_TESTPLAN_VERSION=2/{v2=1;next} !/^[[:space:]]*#/ && NF && $(v2?5:4) == "on" && $1 ~ /^smc_i3c_ibi_/ {print $1; if (++count == 2) exit}' "$TEST_LIST_FILE")
+    mapfile -t fixture_tests < <(awk -F'|' '/^#[[:space:]]*DV_TESTPLAN_VERSION=2/{v2=1;next} !/^[[:space:]]*#/ && NF && $(v2?5:4) == "on" && $1 ~ /^i3c_ibi_/ {print $1; if (++count == 2) exit}' "$TEST_LIST_FILE")
     ((${#fixture_tests[@]} > 0)) || { runner_error "Self-test needs at least one test-plan entry"; return 1; }
     for token in "${fixture_tests[@]}"; do regression_selectors+=(-t "$token"); done
     local regression_console="$(runner_runs_dir)/$reg_id.compact.console.log" fixture_case_count

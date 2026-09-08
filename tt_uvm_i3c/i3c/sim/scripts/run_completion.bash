@@ -6,7 +6,7 @@ _generic_dv_runner_completion() {
     previous="${COMP_WORDS[COMP_CWORD-1]}"
     root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-    local commands='--link link-completion generate gen comp compile test regression regress coverage cov merge-cov signoff view wave summary clean list-tests jobs stop-jobs doctor check source self-test completion help'
+    local commands='--link link-completion generate gen comp compile test regression regress coverage cov merge-cov signoff view wave summary clean list-tests jobs stop-jobs doctor check self-test completion help'
     local options='-h --help --link --rc-file --scheduler --cpus --timeout --idle-timeout --show-output --show-worker-output --log-style --compact-log --verbose-log --detach --x11 --no-x11 --heartbeat-sec --hang-warn-sec --hang-kill-sec --hang-pending-kill-sec --hang-min-elapsed-sec --hang-low-cpu-pct --live-mode --live-overwrite --live-line --live-quiet'
     options+=' -t --test -s --seed --seeds -r --rand-num -p --parallel -v --verb --jobs --worker --retry-max --seed-retry-max --plusargs --extra-run-opts --dump --dump-format --cov --conn --verbosity --include-warnings --no-comp --run-only --id --run-id --run-dir -f --file'
     options+=' -g --group --label --case --level --exclude-test --exclude-group --exclude-label --all --include-off --list-groups --burst-max --burst-parallel --cpoint-max --burst-jobs --burst-delay-sec --burst-start-gap-sec --case-order --attempt-retry-max --no-attempt-retry --attempt-retry-delay-sec --retry-schedule --retry-immediate --retry-deferred-wave --retry-wave-burst-max --retry-wave-worker --degraded-retry --no-degraded-retry --degraded-retry-mode --degraded-retry-delay-sec --degraded-retry-worker --no-degraded-retry-clean --rerun-burst --rerun-failed --list-bursts'
@@ -19,15 +19,6 @@ _generic_dv_runner_completion() {
 
     if ((COMP_CWORD == 1)); then
         COMPREPLY=( $(compgen -W "$commands" -- "$current") )
-        return
-    fi
-
-    if [[ "${COMP_WORDS[1]:-}" == source && $COMP_CWORD -eq 2 ]]; then
-        COMPREPLY=( $(compgen -W 'set mode show pin reset help' -- "$current") )
-        return
-    fi
-    if [[ "${COMP_WORDS[1]:-}" == source && "${COMP_WORDS[2]:-}" == mode ]]; then
-        COMPREPLY=( $(compgen -W 'pinned latest worktree snapshot' -- "$current") )
         return
     fi
 

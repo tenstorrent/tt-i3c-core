@@ -24,7 +24,7 @@ interface i3c_if(
   logic host_sda_pp_en = 1'b0;
   logic device_sda_o = 1'b1;
   logic device_sda_pp_en = 1'b0;
-  // SMC modification: observational state only. It never drives protocol
+  // Project DV modification: observational state only. It never drives protocol
   // signals and is qualified so monitor/host callers cannot impersonate a
   // Device driver that is genuinely blocked waiting for Controller START.
   bit device_driver_wait_for_start_active = 1'b0;

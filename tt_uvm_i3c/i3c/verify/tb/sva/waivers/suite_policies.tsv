@@ -1,12 +1,12 @@
-# SVA suite-policy map for smc_peripherals.
+# SVA suite-policy map for i3c.
 # Format:  <test-name-or-glob>   <policy>
 # The policy names a file under policies/<policy>.list holding SVA waive keys.
 # Resolution: exact match first, then glob match, else default "functional".
 #
 # The initial I3C smoke/sanity/RAL suite uses the functional policy. Extend
 # this map when test-specific assertion waivers are reviewed.
-smc_peripherals_base_test       functional
-smc_i3c_csr_smoke_test          functional
-smc_i3c_sanity_test             functional
-smc_i3c_ral_all_regs_test       functional
+i3c_base_test       functional
+i3c_csr_smoke_test          functional
+i3c_sanity_test             functional
+i3c_ral_all_regs_test       functional
 *                               functional

@@ -10,5 +10,4 @@ TB_DIR       := $(VERIFY_DIR)/tb
 CHECKERS_DIR := $(VERIFY_DIR)/checkers
 LOG_DIR      := logs
 FILELIST_DIR := $(SIM_DIR)/filelists
-RTL_FLIST    := $(FILELIST_DIR)/rtl.f
 TEST_FLIST   := $(FILELIST_DIR)/test.f

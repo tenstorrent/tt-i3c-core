@@ -8,11 +8,9 @@ _dv_runner_source_usage() {
 Usage when sourced:
   source ./run.sh --link [--rc-file <path>]
   source ./run.sh completion bash
-  source ./run.sh env tt
 
-Source mode only updates the current shell environment or activates Bash
-completion. Execute run.sh normally for compile, test, regression, coverage,
-wave, and cleanup commands.
+Sourced mode only activates Bash completion. Execute run.sh normally for
+compile, test, regression, coverage, wave, and cleanup commands.
 EOF
 }
 
@@ -22,23 +20,6 @@ _dv_runner_source_completion() {
     # shellcheck source=/dev/null
     source "$completion"
     echo "[INFO] Activated Bash completion in the current shell."
-}
-
-_dv_runner_source_env() {
-    local root="$1" env_name="$2"
-    case "$env_name" in
-        tt)
-            local env_file="$root/i3c/sim/scripts/tt_local_env.sh"
-            [[ -r "$env_file" ]] || { echo "[ERROR] TT I3C environment file not found: $env_file" >&2; return 1; }
-            # shellcheck source=/dev/null
-            source "$env_file"
-            ;;
-        *)
-            echo "[ERROR] Unknown source environment: ${env_name:-<empty>}" >&2
-            echo "[INFO] Available source environments: tt" >&2
-            return 2
-            ;;
-    esac
 }
 
 if ((_DV_RUNNER_SOURCED)); then
@@ -58,17 +39,14 @@ if ((_DV_RUNNER_SOURCED)); then
                 _dv_runner_status=2
             fi
             ;;
-        env)
-            _dv_runner_source_env "$_dv_runner_root" "${2:-}" || _dv_runner_status=$?
-            ;;
         ''|help|-h|--help) _dv_runner_source_usage ;;
         *)
-            echo "[ERROR] source ./run.sh only supports --link, completion bash, or env tt" >&2
+            echo "[ERROR] source ./run.sh only supports --link or completion bash" >&2
             _dv_runner_source_usage >&2
             _dv_runner_status=2
             ;;
     esac
-    unset -f _dv_runner_source_usage _dv_runner_source_completion _dv_runner_source_env
+    unset -f _dv_runner_source_usage _dv_runner_source_completion
     unset _DV_RUNNER_SOURCED _dv_runner_root
     return "$_dv_runner_status"
 fi
@@ -97,8 +75,6 @@ runner_help_summary() {
     local help_scope="${DV_HELP_SCOPE:-Project}"
     local example_test="${DV_HELP_EXAMPLE_TEST:-smoke_test}"
     local help_tool_setup="${DV_HELP_TOOL_SETUP:-module load vcs verdi}"
-    local help_env_name="${DV_HELP_ENV_NAME:-project}"
-    local help_env_components="${DV_HELP_ENV_COMPONENTS:-project dependencies}"
     local help_dep_root_var="${DV_HELP_DEP_ROOT_VAR:-DV_DEPS_ROOT}"
     cat <<EOF
 $help_title
@@ -111,12 +87,8 @@ First run setup:
   Load simulator and waveform tools:
     $help_tool_setup
 
-  Load the $help_scope environment ($help_env_components):
-    source ./run.sh env $help_env_name
-
-  To select another dependency checkout:
+  Configure the project dependency checkout when it is not in the default location:
     export $help_dep_root_var=/path/to/dependencies
-    source ./run.sh env $help_env_name
 
   Optional Bash completion:
     source ./run.sh --link
@@ -126,9 +98,6 @@ First run setup:
     ./run.sh doctor
     ./run.sh compile --show-output
     ./run.sh list-tests
-
-  Configure a persistent editable dependency checkout, when supported:
-    ./run.sh source help
 
 Commands:
   compile      Compile. Options: --scheduler, --cpus, --cov, --dump-format, --show-output
@@ -142,7 +111,6 @@ Commands:
   generate     Generate project filelists and normalized test plan
   signoff      Run coverage closure followed by regression; supports --waiver
   doctor       Validate project and runner configuration
-  source       Manage persistent project source selection and reviewed pins
   self-test    Run tool-independent runner qualification
   list-tests   Print the current normalized test list
   jobs         List managed jobs; stop-jobs stops them
@@ -189,7 +157,7 @@ $help_scope quick examples (using $example_test):
     ./run.sh view --coverage --run-id <RUN_ID> --variant raw --open
 
 More:
-  ./run.sh help env|source|doctor|comp|test|regression|coverage|merge-cov|view
+  ./run.sh help doctor|comp|test|regression|coverage|merge-cov|view
   ./run.sh <command> --help
   ./run.sh help --all
   Read docs/user-guide/REFERENCE_RUNNER.md for execution and artifact contracts.
@@ -207,32 +175,7 @@ runner_help_command() {
     local example_test="${DV_HELP_EXAMPLE_TEST:-smoke_test}"
     local sanity_test="${DV_HELP_SANITY_TEST:-sanity_test}"
     local help_scope="${DV_HELP_SCOPE:-Project}"
-    local help_env_name="${DV_HELP_ENV_NAME:-project}"
-    local help_env_components="${DV_HELP_ENV_COMPONENTS:-project dependencies}"
-    local help_dep_root_var="${DV_HELP_DEP_ROOT_VAR:-DV_DEPS_ROOT}"
-    local help_dep_root_default="${DV_HELP_DEP_ROOT_DEFAULT:-/path/to/dependencies}"
     case "$topic" in
-        env|environment)
-            cat <<EOF
-$help_scope Environment
-  Load $help_env_components settings into the current shell.
-  This is a source-only operation; executing ./run.sh env $help_env_name cannot
-  update the parent shell.
-
-Usage:
-  source ./run.sh env $help_env_name
-
-Current shared source default:
-  $help_dep_root_var=$help_dep_root_default
-
-Select another source checkout:
-  export $help_dep_root_var=/path/to/dependencies
-  source ./run.sh env $help_env_name
-
-Validate the resolved environment:
-  ./run.sh doctor
-EOF
-            ;;
         comp|compile)
             cat <<EOF
 Compile
@@ -366,13 +309,6 @@ EOF
         doctor)
             printf '%s\n' 'Doctor: validate project configuration, filelists, tools, and test-plan schema.'
             ;;
-        source)
-            if declare -F dv_project_source_help >/dev/null 2>&1; then
-                dv_project_source_help
-            else
-                printf '%s\n' 'Source: this project does not define persistent source management.'
-            fi
-            ;;
         self-test)
             printf '%s\n' 'Self-test: run the tool-independent qualification suite for the runner.'
             ;;
@@ -406,7 +342,7 @@ runner_print_help() {
         --all|all)
             runner_help_summary
             local item
-            for item in env source comp test regression coverage merge-cov view summary; do
+            for item in comp test regression coverage merge-cov view summary; do
                 printf '\n------------------------------------------------------------------------\n'
                 runner_help_command "$item"
             done

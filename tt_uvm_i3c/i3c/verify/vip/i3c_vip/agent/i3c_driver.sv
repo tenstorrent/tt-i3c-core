@@ -482,7 +482,7 @@ class i3c_driver extends uvm_driver#(.REQ(i3c_seq_item), .RSP(i3c_seq_item));
           if (req.IBI && req.IBI_START) begin
             bus_state = DrvStart;
           end else begin
-            // SMC modification: publish only this Device-driver wait through
+            // Project DV modification: publish only this Device-driver wait through
             // the interface's observational readiness flag. No bus behavior,
             // timing, or state transition is changed.
             cfg.vif.wait_for_host_start(1'b1);
