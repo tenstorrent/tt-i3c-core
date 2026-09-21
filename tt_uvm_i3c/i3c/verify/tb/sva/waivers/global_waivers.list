@@ -1,0 +1,6 @@
+# Global SVA waiver keys for i3c (applied to every test).
+# One key per line; blank lines and #-comments ignored. Each key K becomes a
+# +SVA_WAIVE_<K> plusarg at run time.
+#
+# Empty: no global I3C assertion waiver is approved. Prefer test-specific
+# policy entries when a measured RTL limitation requires temporary handling.

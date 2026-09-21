@@ -1,0 +1,8 @@
+*.sh text eol=lf
+run.sh text eol=lf
+*.bash text eol=lf
+*.sv text eol=lf
+*.svh text eol=lf
+*.mk text eol=lf
+*.f text eol=lf
+Makefile text eol=lf

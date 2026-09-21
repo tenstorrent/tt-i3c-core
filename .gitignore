@@ -43,7 +43,7 @@ questa_work/
 results.xml
 sim_build/
 **sim_build**
-sim/
+/sim/
 src/csr/html/
 src/csr/md/
 src/rdl/docs/html*
