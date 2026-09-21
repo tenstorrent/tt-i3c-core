@@ -1021,7 +1021,8 @@ module flow_active
 
         if (transfer_cnt_q <= data_length & (~fmt_bit_i & fmt_flag_read_valid_i) & ~fmt_flag_stop_after_o) begin  // receive RX T bit
           fmt_flag_stop_after_o = 1'b1;
-          resp_err_status_d = I3cShortReadErr;
+          // SRE=0 is ALLOW_SHORT_READ: the transfer succeeded, just with fewer bytes.
+          resp_err_status_d = regular_direct_cmd_desc.sre ? I3cShortReadErr : Success;
           rx_dword_array[byte_select] = fmt_byte_i;
           rx_queue_wvalid_o = 1'b1; // send the uncompleted word to the RX queue when transaction is finished early
         end
@@ -1881,7 +1882,9 @@ module flow_active
         end else if (transfer_cnt_q >= data_length & fmt_flag_read_valid_i) begin
           state_next = regular_direct_cmd_desc.wroc ? WriteResp : Idle;
         end else if (transfer_cnt_q < data_length & (~fmt_bit_i & fmt_flag_read_valid_i)) begin  // receive RX T bit
-          state_next = regular_direct_cmd_desc.sre ? WriteResp : Idle;
+          // SRE=1 makes the short read an error, which must be reported regardless of WROC;
+          // SRE=0 makes it a normal completion, reported only if WROC asks for one.
+          state_next = (regular_direct_cmd_desc.sre | regular_direct_cmd_desc.wroc) ? WriteResp : Idle;
         end
       end
       I2CRead: begin
