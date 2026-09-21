@@ -304,13 +304,14 @@ module flow_active
   logic err_handled_q, err_handled_d;
 
   // IBI signals
-  logic ibi_abort, ibi_done;
+  logic ibi_abort, ibi_nodata, ibi_done;
   // IBI policy is resolved from the DAT entry belonging to the requesting Target.
   // dat_rdata only holds that entry once dat_captured pulses (3 cycles after the
   // address byte), so the ACK/NACK must not be taken from it before then.
   logic [6:0] ibi_req_da_d, ibi_req_da_q;
   logic ibi_pol_valid_d, ibi_pol_valid_q;
   logic ibi_pol_abort_d, ibi_pol_abort_q;
+  logic ibi_pol_nodata_d, ibi_pol_nodata_q;
   logic ibi_dat_hit;
   i3c_ibi_status_desc_t ibi_status_d, ibi_status_q;
   logic [  $clog2(IBIBufferDepthDwords)-1:0] ibi_dword_select;
@@ -646,10 +647,12 @@ module flow_active
       ibi_req_da_q    <= '0;
       ibi_pol_valid_q <= 1'b0;
       ibi_pol_abort_q <= 1'b0;
+      ibi_pol_nodata_q <= 1'b0;
     end else begin
       ibi_req_da_q    <= ibi_req_da_d;
       ibi_pol_valid_q <= ibi_pol_valid_d;
       ibi_pol_abort_q <= ibi_pol_abort_d;
+      ibi_pol_nodata_q <= ibi_pol_nodata_d;
     end
   end
 
@@ -704,9 +707,11 @@ module flow_active
     prev_cmd_toc_d = prev_cmd_toc_q;
     ibi_done = 1'b0;
     ibi_abort = 1'b0;
+    ibi_nodata = 1'b0;
     ibi_req_da_d = ibi_req_da_q;
     ibi_pol_valid_d = ibi_pol_valid_q;
     ibi_pol_abort_d = ibi_pol_abort_q;
+    ibi_pol_nodata_d = ibi_pol_nodata_q;
     ibi_status_d = ibi_status_q;
     ibi_data_d = ibi_data_q;
     ibi_wb_d = ibi_wb_q;
@@ -1586,6 +1591,7 @@ module flow_active
         // Only the queue-capacity term is known without the DAT fetch; the
         // DAT-derived terms are held off until the fetch for this requester lands.
         ibi_abort = (ibi_pol_valid_q & ibi_pol_abort_q) | (ibi_max_data_dwords_i == '0);
+        ibi_nodata = ibi_pol_valid_q & ibi_pol_nodata_q;
         rlt_req = 1'b0;
         if (~ibi_wb_q) begin
           if (transfer_cnt_q == '0) begin
@@ -1604,6 +1610,12 @@ module flow_active
               fmt_bit_o = 1'b1;  // NACK the dynamic address
               ibi_status_d.ibi_sts = 1'b1;
               ibi_wb_d = fmt_fifo_rdone_i;
+            // A Target with IBI_PAYLOAD=0 releases SDA after the ACK, so the read
+            // phase must be skipped entirely: ACK the address and STOP.
+            end else if (ibi_nodata) begin
+              fmt_flag_stop_after_o = 1'b1;
+              fmt_flag_read_bytes_o = 1'b0;
+              ibi_wb_d = fmt_fifo_rdone_i;
             end
             // (OCA) the IBI Status Descriptor IBI_ID field carries the target's 7-bit dynamic address + RnW bit
             //       TODO: only Regular IBI is supported right now, the ibi_id will have to change if more status_types are supported
@@ -1620,8 +1632,10 @@ module flow_active
               ibi_req_da_d = 7'(fmt_byte_i >> 1);
               ibi_pol_valid_d = 1'b0;
               ibi_pol_abort_d = 1'b0;
+              ibi_pol_nodata_d = 1'b0;
             end else if (dat_captured & ~ibi_pol_valid_q) begin
-              ibi_pol_abort_d = ~ibi_dat_hit | dat_rdata.ibi_reject | ~dat_rdata.ibi_payload;
+              ibi_pol_abort_d = ~ibi_dat_hit | dat_rdata.ibi_reject;
+              ibi_pol_nodata_d = ibi_dat_hit & ~dat_rdata.ibi_reject & ~dat_rdata.ibi_payload;
               ibi_pol_valid_d = 1'b1;
             end
           end else begin
